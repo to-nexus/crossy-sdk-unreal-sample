@@ -3,10 +3,14 @@
     Windows / PowerShell 7+ equivalent of scripts/install-plugins.sh.
 
     Usage:
-        $env:GITHUB_TOKEN = "ghp_xxx"
         pwsh ./scripts/install-plugins.ps1               # install
         pwsh ./scripts/install-plugins.ps1 -Verify       # verify only
         pwsh ./scripts/install-plugins.ps1 -Force        # re-download
+
+    The default registry repo is public, so no authentication is required.
+    If you hit GitHub's anonymous rate limit (60 requests/hour, e.g. on a
+    shared CI runner), set $env:GITHUB_TOKEN to any GitHub PAT — public
+    repos do not require any specific scopes.
 
     Requires: PowerShell 7+ (Expand-Archive, Invoke-WebRequest, ConvertFrom-Json)
 #>
@@ -73,18 +77,17 @@ if ($Verify) {
 }
 
 # ---------- install mode ----------------------------------------------------
-if (-not $env:GITHUB_TOKEN) {
-    throw "GITHUB_TOKEN is not set. Create a fine-grained PAT (contents:read) for $Owner/$Repo and `$env:GITHUB_TOKEN = '...'`."
-}
 
 New-Item -ItemType Directory -Path $PluginsDir -Force | Out-Null
-$headersJson = @{
-    Authorization = "Bearer $env:GITHUB_TOKEN"
-    Accept        = 'application/vnd.github+json'
-}
-$headersBin = @{
-    Authorization = "Bearer $env:GITHUB_TOKEN"
-    Accept        = 'application/octet-stream'
+
+# Authorization header is attached only when a token is present. Public repos
+# can be read anonymously; a token is just a way to bypass the 60/hr
+# anonymous rate limit on shared runners.
+$headersJson = @{ Accept = 'application/vnd.github+json' }
+$headersBin  = @{ Accept = 'application/octet-stream' }
+if ($env:GITHUB_TOKEN) {
+    $headersJson.Authorization = "Bearer $env:GITHUB_TOKEN"
+    $headersBin.Authorization  = "Bearer $env:GITHUB_TOKEN"
 }
 
 foreach ($e in PluginEntries) {

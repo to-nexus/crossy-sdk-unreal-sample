@@ -2,7 +2,7 @@
 # ----------------------------------------------------------------------------
 #  install-plugins.sh
 #  Fetches CROSSx Unreal plugins listed in crossx-plugins.json from GitHub
-#  Releases (private SDK repo) and unpacks them into ./Plugins/.
+#  Releases and unpacks them into ./Plugins/.
 #
 #  Modes:
 #    (default)   Install / reconcile to match crossx-plugins.json
@@ -10,7 +10,9 @@
 #    --force     Force re-download even if sha256 matches
 #
 #  Requirements: bash >=3.2, curl, jq, unzip, shasum OR sha256sum
-#  Env: GITHUB_TOKEN  (fine-grained PAT with contents:read on the SDK repo)
+#  Env: GITHUB_TOKEN  (OPTIONAL — only needed to raise GitHub's anonymous
+#                     rate limit (60/hr -> 5000/hr) or to read a private
+#                     registry. The default registry repo is public.)
 # ----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -48,12 +50,12 @@ fi
 [[ -f "$MANIFEST" ]] || { echo "[err] manifest not found: $MANIFEST" >&2; exit 1; }
 [[ -f "$LOCK"     ]] || printf '{\n  "plugins": {}\n}\n' > "$LOCK"
 
-if [[ "$MODE" != "verify" && -z "${GITHUB_TOKEN:-}" ]]; then
-    echo "[err] GITHUB_TOKEN is not set."
-    echo "      Create a fine-grained PAT (contents:read) for the registry repo"
-    echo "      listed in crossx-plugins.json and export it:"
-    echo "        export GITHUB_TOKEN=ghp_xxx"
-    exit 1
+# GITHUB_TOKEN is optional: GitHub Releases on a public repo can be read
+# anonymously. We attach Authorization only when a token is present, mainly
+# to bypass the 60/hr anonymous rate limit on shared CI runners.
+AUTH_HEADER_ARG=()
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    AUTH_HEADER_ARG=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
 fi
 
 OWNER=$(jq -r '.registry.owner' "$MANIFEST")
@@ -125,10 +127,11 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
 
     # 1) Resolve asset URL via Releases API
     release_json=$(curl -fsSL \
-        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+        "${AUTH_HEADER_ARG[@]}" \
         -H "Accept: application/vnd.github+json" \
         "${API}/releases/tags/${tag}") || {
         echo "[err] $name: tag '$tag' not found on ${OWNER}/${REPO}" >&2
+        echo "      (If you hit a rate limit, set GITHUB_TOKEN to any GitHub PAT — public repos do not require special scopes.)" >&2
         exit 1; }
 
     asset_url=$(echo "$release_json" | jq -r --arg a "$asset" '.assets[] | select(.name==$a) | .url')
@@ -153,7 +156,7 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
     tmpzip="$(mktemp -t crossx-plugin-XXXXXX).zip"
     echo "[get]  $name@$version  <-  ${OWNER}/${REPO}  ($asset)"
     curl -fSL --progress-bar \
-        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+        "${AUTH_HEADER_ARG[@]}" \
         -H "Accept: application/octet-stream" \
         "$asset_url" -o "$tmpzip"
 

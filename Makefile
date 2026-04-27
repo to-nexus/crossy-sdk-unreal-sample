@@ -5,11 +5,15 @@
 #  Group 2: Build / device automation (Phase 4; placeholders for now)
 #
 #  Environment:
-#    GITHUB_TOKEN  Required for sdk-install / sdk-update. Fine-grained PAT with
-#                  contents:read on the registry repo defined in
-#                  crossx-plugins.json (default: to-nexus/crossy-sdk-unreal).
+#    GITHUB_TOKEN  OPTIONAL. The default registry repo defined in
+#                  crossx-plugins.json (to-nexus/crossy-sdk-unreal-sample) is
+#                  public, so sdk-install / sdk-update work anonymously out of
+#                  the box. Provide a token only if you need to:
+#                    - bypass GitHub's 60/hr anonymous rate limit (shared CI
+#                      runners), or
+#                    - point the registry at a private repo.
 #
-#                  Can be provided via either:
+#                  When needed, it can be provided via either:
 #                    (a) shell export:  export GITHUB_TOKEN=...
 #                    (b) local .env:    echo 'GITHUB_TOKEN=...' > .env
 #                        (.env is .gitignore'd; this Makefile auto-loads it.)
@@ -19,9 +23,9 @@ SHELL := /usr/bin/env bash
 .ONESHELL:
 .DEFAULT_GOAL := help
 
-# Auto-load `.env` (and `.env.local` override) so developers don't have to
-# remember to `export GITHUB_TOKEN` in every new terminal. `export` forwards
-# loaded variables into recipe subshells.
+# Auto-load `.env` (and `.env.local` override) — used for the optional
+# GITHUB_TOKEN as well as any future per-developer overrides. `export`
+# forwards loaded variables into recipe subshells.
 ifneq (,$(wildcard .env))
     include .env
     export
@@ -45,7 +49,7 @@ help: ## Show this help
 
 .PHONY: sdk-install sdk-update sdk-verify sdk-clean
 
-sdk-install: ## Install / reconcile plugins per crossx-plugins.json  (needs $$GITHUB_TOKEN)
+sdk-install: ## Install / reconcile plugins per crossx-plugins.json (no token needed for the public default registry)
 	@./scripts/install-plugins.sh
 
 sdk-update: ## Bump a single plugin. Ex: make sdk-update name=CROSSxSdkUnrealPlugin version=0.3.0
