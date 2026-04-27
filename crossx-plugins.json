@@ -1,0 +1,13 @@
+{
+  "$schema": "https://crossnexus.com/schemas/crossx-plugins.schema.json",
+  "comment": "Edit the versions below, then run `make sdk-install` (requires env var GITHUB_TOKEN with read access to the registry repo).",
+  "registry": {
+    "type":  "github-releases",
+    "owner": "to-nexus",
+    "repo":  "crossy-sdk-unreal"
+  },
+  "plugins": {
+    "CROSSxSdkUnrealPlugin":     "0.0.0-beta.1",
+    "CROSSxRampSdkUnrealPlugin": "0.0.0-beta.1"
+  }
+}

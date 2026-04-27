@@ -1,0 +1,30 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.7",
+	"Category": "",
+	"Description": "",
+	"Modules": [
+		{
+			"Name": "CrossySdkUnrealSamp",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "ModelingToolsEditorMode",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		},
+		{
+			"Name": "CROSSxSdkUnrealPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "CROSSxRampSdkUnrealPlugin",
+			"Enabled": true
+		}
+	]
+}

@@ -1,0 +1,205 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Blueprint/UserWidget.h"
+#include "Core/Types/CROSSxSdkConfig.h"
+#include "Core/Types/CROSSxSdkTypes.h"
+#include "Localization/DappLocalizationSubsystem.h"
+#include "DappTestPanelBase.generated.h"
+
+class UButton;
+class UTextBlock;
+class UEditableTextBox;
+class UMultiLineEditableTextBox;
+class UPanelWidget;
+
+class ADappActor;
+class UDappLocalizationSubsystem;
+class UDappNotificationSubsystem;
+class UCROSSxSdkSubsystem;
+class UCROSSxRampSdkSubsystem;
+
+/**
+ * UDappTestPanelBase — C++ base class for the sample test panel widget.
+ *
+ * Designed to be paired with a UMG asset (e.g. WBP_DappTestPanel) that
+ * reparents this class. All bound widgets use BindWidgetOptional so the WBP
+ * can implement whichever buttons/sections it wants — unused handlers simply
+ * no-op at runtime.
+ *
+ * The WBP → C++ contract is the widget *name*. See the SAMPLE_WIDGET_GUIDE.md
+ * document for the canonical list of required widget names. External teams
+ * duplicating WBP_DappTestPanel only need to keep the names intact to inherit
+ * all SDK wiring for free.
+ *
+ * Mental model mirrors Unity sample's Dapp.cs — each SDK feature is a single
+ * `OnClick*` handler that either fires a high-level `*WithUIAsync` SDK method
+ * (which displays the SDK's built-in modal flow) or a lower-level *Async
+ * method whose result we surface through the notification bus + status text.
+ */
+UCLASS(Abstract, Blueprintable, BlueprintType, meta = (DisplayName = "Dapp Test Panel"))
+class CROSSYSDKUNREALSAMP_API UDappTestPanelBase : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+
+	// ═══════════════ Exposed defaults (editable on the WBP) ═══════════════
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
+	FString DefaultChainId = TEXT("eip155:612044");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
+	FString DefaultTxValueWei = TEXT("0x0");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
+	FString DefaultSignMessage = TEXT("Hello from CROSSx Unreal Sample");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
+	FString DefaultTokenDecimals = TEXT("18");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults", meta = (MultiLine = true))
+	FString DefaultTypedDataJson;
+
+protected:
+	// ═══════════════ Bound widgets (all optional) ═══════════════
+	//
+	// ── Buttons ─────────────────────────────────────────────
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_Login;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_LoginGoogle;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_LoginApple;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_UseRamp;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_CreateWallet;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_GetAddress;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_GetAllAddresses;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_SelectWallet;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_GetNativeBalance;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_SignTx;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_SendTx;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_GetTokenBalance;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_SendToken;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_SignPersonalMessage;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_SignTypedData;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_CheckTokenExpiry;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_RefreshToken;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_GetUserInfo;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_SignOut;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_ToggleLanguage;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_EditorSimulateDeepLink;
+
+	// ── Inputs ──────────────────────────────────────────────
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_ChainId;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_From;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_To;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_Value;
+	UPROPERTY(meta = (BindWidgetOptional)) UMultiLineEditableTextBox* Inp_Data;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_TokenContract;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_TokenTo;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_TokenAmount;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_TokenDecimals;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_SignMessage;
+	UPROPERTY(meta = (BindWidgetOptional)) UMultiLineEditableTextBox* Inp_SignTypedData;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_RampUrl;
+
+	// ── Display ─────────────────────────────────────────────
+	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* Txt_WalletAddress;
+	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* Txt_UserId;
+	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* Txt_Status;
+	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* Txt_Language;
+
+	// ── Sections (panel visibility toggled by login state) ─
+	UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* Panel_Login;
+	UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* Panel_Wallet;
+	UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* Panel_Features;
+	UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* Panel_EditorTools;
+
+	// ═══════════════ Blueprint-callable hooks ═══════════════
+	// These are exposed so that a BP subclass can override behavior (e.g.
+	// when the designer wants custom visual feedback on each action).
+
+	UFUNCTION(BlueprintCallable, Category = "Dapp|Panel")
+	void RefreshLocalizedLabels();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Dapp|Panel")
+	void OnLoginStateChanged(bool bLoggedIn);
+
+	// ═══════════════ UI → logic click handlers ═══════════════
+	UFUNCTION() void OnClickLogin();
+	UFUNCTION() void OnClickLoginGoogle();
+	UFUNCTION() void OnClickLoginApple();
+	UFUNCTION() void OnClickUseRamp();
+	UFUNCTION() void OnClickCreateWallet();
+	UFUNCTION() void OnClickGetAddress();
+	UFUNCTION() void OnClickGetAllAddresses();
+	UFUNCTION() void OnClickSelectWallet();
+	UFUNCTION() void OnClickGetNativeBalance();
+	UFUNCTION() void OnClickSignTx();
+	UFUNCTION() void OnClickSendTx();
+	UFUNCTION() void OnClickGetTokenBalance();
+	UFUNCTION() void OnClickSendToken();
+	UFUNCTION() void OnClickSignPersonalMessage();
+	UFUNCTION() void OnClickSignTypedData();
+	UFUNCTION() void OnClickCheckTokenExpiry();
+	UFUNCTION() void OnClickRefreshToken();
+	UFUNCTION() void OnClickGetUserInfo();
+	UFUNCTION() void OnClickSignOut();
+	UFUNCTION() void OnClickToggleLanguage();
+	UFUNCTION() void OnClickEditorSimulateDeepLink();
+
+	// ═══════════════ DappActor / Subsystem callbacks ═══════════════
+	UFUNCTION() void HandleSdkReady(bool bHasActiveSession);
+	UFUNCTION() void HandleAuthChanged(bool bLoggedIn);
+	UFUNCTION() void HandleLanguageChanged(EDappLang NewLanguage);
+
+	// ═══════════════ SDK async callbacks ═══════════════
+	UFUNCTION() void HandleSignInResult(const FCROSSxAuthResult& Result);
+	UFUNCTION() void HandleSignOutResult(bool bSuccess);
+	UFUNCTION() void HandleCreateWalletResult(const FCROSSxCreateWalletResult& Result);
+	UFUNCTION() void HandleGetAddressResult(const FCROSSxGetAddressResponse& Result);
+	UFUNCTION() void HandleGetAddressesResult(const FCROSSxGetAddressesResponse& Result);
+	UFUNCTION() void HandleSelectWalletResult(const FCROSSxWalletSelectionResult& Result);
+	UFUNCTION() void HandleSignTxResult(const FCROSSxSignTxResponse& Result);
+	UFUNCTION() void HandleSendTxResult(const FCROSSxSendTxResponse& Result);
+	UFUNCTION() void HandleSignMessageResult(const FCROSSxSignMessageResponse& Result);
+	UFUNCTION() void HandleSignTypedDataResult(const FCROSSxSignTypedDataResponse& Result);
+	UFUNCTION() void HandleNativeBalanceResult(const FString& HexBalance);
+	UFUNCTION() void HandleTokenBalanceRpcResult(const FCROSSxJsonRpcResponse& Result);
+	UFUNCTION() void HandleSendTokenTxResult(const FCROSSxSendTxResponse& Result);
+	UFUNCTION() void HandleGetUserInfoResult(const FCROSSxSdkUserInfo& Info);
+	UFUNCTION() void HandleRefreshTokenResult(const FCROSSxRefreshTokenResult& Result);
+
+private:
+	// ── Resolvers ──────────────────────────────────────────
+	ADappActor*                 ResolveActor() const;
+	UCROSSxSdkSubsystem*        ResolveSdk() const;
+	UCROSSxRampSdkSubsystem*    ResolveRampSdk() const;
+	UDappLocalizationSubsystem* ResolveLoc() const;
+	UDappNotificationSubsystem* ResolveNotif() const;
+
+	// ── Helpers ────────────────────────────────────────────
+	void BindAllClickHandlers();
+	void ApplyLoginState(bool bLoggedIn);
+	FString  ReadText(UEditableTextBox* Box, const FString& Fallback = FString()) const;
+	FString  ReadText(UMultiLineEditableTextBox* Box, const FString& Fallback = FString()) const;
+	void     WriteText(UEditableTextBox* Box, const FString& Text);
+	void     WriteLabel(UTextBlock* Block, const FText& Text);
+	void     SetStatus(FName Key);
+	void     SetStatusText(const FText& Text);
+	FString  ResolveFromAddress() const;
+	FString  ResolveChainId() const;
+	int32    ResolveTokenDecimals() const;
+	void     Notify(FName Key);
+	void     NotifyArgs(FName Key, const TMap<FString, FString>& Args);
+	void     NotifyError(FName Key, const TMap<FString, FString>& Args);
+	static FString ShortenAddress(const FString& Address);
+	static FString HexToDecimalString(const FString& HexWithOrWithoutPrefix);
+
+	// Token-balance request bookkeeping (since HandleTokenBalanceRpcResult has
+	// no context about which address / decimals were requested).
+	UPROPERTY(Transient) FString PendingTokenBalanceHolder;
+	UPROPERTY(Transient) int32   PendingTokenBalanceDecimals = 18;
+
+	UPROPERTY(Transient) bool    bLastKnownLoggedIn = false;
+};
