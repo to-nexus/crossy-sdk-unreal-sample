@@ -190,23 +190,26 @@ make sdk-clean && make sdk-install
 ## 5. 다음 단계
 
 1. Unreal Editor 에서 `CrossySdkUnrealSamp.uproject` 를 엽니다.
-2. Editor → Project Settings → CROSSx SDK → **Project ID** 를 입력합니다.
-3. **에디터-측 에셋 셋업** 을 수행합니다 (최초 1회):
-   - `Localization/DT_DappStrings.csv` 를 `Content/Localization/` 으로 임포트
+2. Editor → Project Settings → Plugins → CROSSx SDK → **Prod Project ID** 입력.
+3. **에디터-측 에셋 셋업** (최초 1회) — 상세 절차는
+   **`Documentation/SAMPLE_WIDGET_GUIDE.md`**:
+   - `Localization/DT_DappStrings.csv` → `Content/Localization/` 임포트
      (Row Type = `FDappStringRow`)
-   - `WBP_DappTestPanel` 을 생성하고 `DappTestPanelBase` 로 Reparent
-   - 레벨에 `ADappActor` 배치 + `WBP_DappTestPanel` 을 PlayerController 에서
-     viewport 에 추가
-   - 상세 지침 및 BindWidget 네이밍 명세: **`Documentation/SAMPLE_WIDGET_GUIDE.md`**
-4. 패널에서 Login → Create Wallet → Sign/Send Tx → Ramp 순서로 스모크 테스트.
-5. Phase 4 의 `make ios` / `make android` / `make install` / `make run` 으로
-   실기기 배포·실행을 검증합니다.
+   - `WBP_DappTestPanel` 생성 후 `DappTestPanelBase` 로 Reparent
+   - StartupMap 생성 + `Project Settings → Maps & Modes` 에 등록
+     (`ADappActor` 와 패널은 `ADappGameMode` 가 자동으로 스폰합니다 —
+     수동 배치 불필요)
+4. 에디터 PIE 로 Login → Create Wallet → Sign/Send Tx → Ramp 순서 스모크 테스트.
+5. 실기기 빌드/배포 — `make ios` / `make android` / `make install-android` /
+   `make run-android` 등. 상세 절차 + 자주 만나는 이슈는
+   **`Documentation/BUILD_GUIDE.md`**.
 
 ---
 
 ## 6. 레퍼런스
 
 - **UI / 로컬라이제이션 셋업**: `Documentation/SAMPLE_WIDGET_GUIDE.md`
+- **빌드 / 배포 가이드**: `Documentation/BUILD_GUIDE.md`
 - SDK 공식 가이드: `../CrossySdkUnreal/docs/getting-started.ko.md`
 - SDK 배포 규약: `../CrossySdkUnreal/DEPLOYMENT_GUIDE.md`
 - Unity 버전 대응 문서: `../crossy-sdk-unity-sample/HOW_TO_SWITCH_TO_DEPLOYED_SDK.md`

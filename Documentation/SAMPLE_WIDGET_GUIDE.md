@@ -18,6 +18,12 @@ External dApp teams that duplicate this project only need to:
 - Re-style the WBP_DappTestPanel layout in Designer
 - Optionally remove unused buttons (all bindings are `BindWidgetOptional`)
 
+> **Bootstrapping is automated.** `ADappGameMode` (configured as the
+> `GlobalDefaultGameMode` in `DefaultEngine.ini`) handles spawning the
+> `ADappActor` and adding the test-panel widget to the viewport at level
+> start. You only need to author the WBP at the conventional path; placing
+> the actor manually in the level is **not required**.
+
 ---
 
 ## 1. DataTable import — `DT_DappStrings`
@@ -159,24 +165,48 @@ if the WBP author hasn't pre-filled them in Designer.
 
 ---
 
-## 3. Placing `ADappActor` and the widget in the startup map
+## 3. Startup map (one minute)
 
-1. Open your startup map (typically `Content/Maps/StartupMap.umap`).
-2. Drag the **`DappActor`** class from the Place Actors panel into the world.
-   Verify in the Details panel:
-   - `AppName`: `CROSSx Unreal Sample`
-   - `DefaultChainId`: `eip155:612044`
-   - `AppIdOverride`: leave empty unless you really need to force a specific
-     bundle id
-3. Create a Player Controller blueprint (or use the default) whose
-   `BeginPlay` does:
-   ```
-   Create Widget → Class: WBP_DappTestPanel → Add to Viewport
-   Set Input Mode UI Only
-   Show Mouse Cursor: true
-   ```
-4. Make sure `Project Settings → Maps & Modes → Editor Startup Map` and
-   `Game Default Map` both reference this map.
+`ADappGameMode` is wired up as the project's `GlobalDefaultGameMode`
+(`Config/DefaultEngine.ini`). It does the following at level `BeginPlay`:
+
+1. Looks up an existing `ADappActor` in the level; spawns one if absent.
+2. Loads the soft-referenced `WBP_DappTestPanel` (default path
+   `/Game/UI/WBP_DappTestPanel.WBP_DappTestPanel_C`), creates the widget
+   for the first PlayerController, and adds it to the viewport.
+3. Switches input mode to **Game and UI** with the cursor visible.
+
+So all you need is **a map**:
+
+1. `File → New Level → Empty Level`. Save as
+   `Content/Maps/StartupMap.umap`.
+2. **Project Settings → Maps & Modes**
+   - **Editor Startup Map** = `StartupMap`
+   - **Game Default Map** = `StartupMap`
+3. Hit **Play**. The login button appears; you should see
+   `LogDappGameMode: Spawned ADappActor (...)` and
+   `LogDappGameMode: Test panel widget '...' added to viewport.` in the
+   Output Log.
+
+### Customizing the auto-bootstrap
+
+`ADappGameMode` exposes everything it does as `EditDefaultsOnly` so you can
+tweak it from `Config/DefaultGame.ini` (already pre-filled with the
+conventional path) **without** subclassing in Blueprint:
+
+```ini
+[/Script/CrossySdkUnrealSamp.DappGameMode]
+TestPanelWidgetClass=/Game/UI/WBP_DappTestPanel.WBP_DappTestPanel_C
+bAutoSpawnDappActor=True
+bAutoCreateTestPanel=True
+bAutoEnableUIInputMode=True
+```
+
+If you'd rather subclass it, create `BP_DappGameMode` (parent =
+`DappGameMode`), set `TestPanelWidgetClass` in the BP defaults, then point
+`Project Settings → Maps & Modes → Default GameMode` at it. Manual placement
+of `ADappActor` in the level is also supported — the GameMode skips its
+spawn step if it finds one already there.
 
 ---
 
@@ -200,6 +230,8 @@ notification visuals; you can use any existing toast widget you already own.
 - [ ] Editor opens with no missing asset warnings
 - [ ] `WBP_DappTestPanel` compiles with **no** "meta=BindWidget could not
       find" warnings (they become errors when missing `Optional`)
+- [ ] Editor PIE: Output Log shows `LogDappGameMode: Spawned ADappActor`
+      and `Test panel widget '...' added to viewport.`
 - [ ] Editor PIE → `Btn_Login` click opens the SDK's provider modal
 - [ ] After successful login, `Panel_Wallet` becomes visible and
       `Txt_WalletAddress` shows an address
