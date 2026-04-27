@@ -4,7 +4,7 @@
   "registry": {
     "type":  "github-releases",
     "owner": "to-nexus",
-    "repo":  "crossy-sdk-unreal"
+    "repo":  "crossy-sdk-unreal-sample"
   },
   "plugins": {
     "CROSSxSdkUnrealPlugin":     "0.0.0-beta.1",

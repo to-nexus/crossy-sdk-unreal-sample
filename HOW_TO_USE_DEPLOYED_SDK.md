@@ -17,7 +17,7 @@ Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, �
 | `Packages/manifest.json` | `crossx-plugins.json` (편집 대상) |
 | `Packages/packages-lock.json` | `crossx-plugins.lock.json` (스크립트가 관리) |
 | `npm install` (UPM 자동) | `make sdk-install` |
-| npm registry (Public) | `to-nexus/crossy-sdk-unreal` Releases (Private, PAT 필요) |
+| npm registry (Public) | `to-nexus/crossy-sdk-unreal-sample` Releases (Private, PAT 필요) |
 
 `Plugins/CROSSxSdkUnrealPlugin/` 와 `Plugins/CROSSxRampSdkUnrealPlugin/` 는
 `.gitignore` 로 제외되며, `make sdk-install` 가 매번 같은 버전으로 재생성합니다.
@@ -37,12 +37,12 @@ Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, �
 
 ### 1.2 GitHub Personal Access Token
 
-SDK Release 호스팅 레포 (`to-nexus/crossy-sdk-unreal`) 는 프라이빗입니다.
+SDK Release 호스팅 레포 (`to-nexus/crossy-sdk-unreal-sample`) 는 프라이빗입니다.
 **Fine-grained PAT** 를 발급하세요:
 
 1. GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → *Generate new token*
 2. **Resource owner**: `to-nexus`
-3. **Repository access**: *Only select repositories* → `to-nexus/crossy-sdk-unreal`
+3. **Repository access**: *Only select repositories* → `to-nexus/crossy-sdk-unreal-sample`
 4. **Repository permissions**: `Contents` → **Read-only**
 5. 생성된 토큰을 다음 중 **한 가지 방법** 으로 주입:
 
@@ -132,11 +132,11 @@ make sdk-install
 ### 3.3 사용 가능한 버전 확인
 
 ```bash
-gh release list --repo to-nexus/crossy-sdk-unreal --limit 50
+gh release list --repo to-nexus/crossy-sdk-unreal-sample --limit 50
 ```
 
 브라우저에서 확인:
-<https://github.com/to-nexus/crossy-sdk-unreal/releases>
+<https://github.com/to-nexus/crossy-sdk-unreal-sample/releases>
 
 ---
 
