@@ -18,10 +18,7 @@ Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, �
 | `Packages/packages-lock.json` | `crossx-plugins.lock.json` (스크립트가 관리) |
 | `npm install` (UPM 자동)      | `make sdk-install`                           |
 
-<<<<<<< HEAD
 | npm registry (Public) | `to-nexus/crossy-sdk-unreal-sample` Releases (Public, **토큰 불필요**) |
-=======
-| npm registry (Public) | `to-nexus/crossy-sdk-unreal-sample` Releases (Private, PAT 필요) |
 
 > > > > > > > 6c6a2bd3551585cefadc48c4166e35df685e3ed1
 
@@ -134,10 +131,7 @@ make sdk-install
 gh release list --repo to-nexus/crossy-sdk-unreal-sample --limit 50
 ```
 
-<<<<<<< HEAD
 브라우저에서 확인 (퍼블릭 레포이므로 로그인 없이도 보입니다):
-=======
-브라우저에서 확인:
 
 > > > > > > > 6c6a2bd3551585cefadc48c4166e35df685e3ed1
 > > > > > > > <https://github.com/to-nexus/crossy-sdk-unreal-sample/releases>
