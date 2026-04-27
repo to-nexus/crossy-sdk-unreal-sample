@@ -12,12 +12,18 @@
 Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, 본 샘플은
 **manifest + install 스크립트** 조합으로 UPM 과 같은 경험을 재현합니다.
 
-| Unity | Unreal (이 레포) |
-|-------|-----------------|
-| `Packages/manifest.json` | `crossx-plugins.json` (편집 대상) |
+| Unity                         | Unreal (이 레포)                             |
+| ----------------------------- | -------------------------------------------- |
+| `Packages/manifest.json`      | `crossx-plugins.json` (편집 대상)            |
 | `Packages/packages-lock.json` | `crossx-plugins.lock.json` (스크립트가 관리) |
-| `npm install` (UPM 자동) | `make sdk-install` |
+| `npm install` (UPM 자동)      | `make sdk-install`                           |
+
+<<<<<<< HEAD
 | npm registry (Public) | `to-nexus/crossy-sdk-unreal-sample` Releases (Public, **토큰 불필요**) |
+=======
+| npm registry (Public) | `to-nexus/crossy-sdk-unreal-sample` Releases (Private, PAT 필요) |
+
+> > > > > > > 6c6a2bd3551585cefadc48c4166e35df685e3ed1
 
 `Plugins/CROSSxSdkUnrealPlugin/` 와 `Plugins/CROSSxRampSdkUnrealPlugin/` 는
 `.gitignore` 로 제외되며, `make sdk-install` 가 매번 같은 버전으로 재생성합니다.
@@ -28,31 +34,26 @@ Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, �
 
 ### 1.1 필수 도구
 
-| 도구 | 용도 | macOS 설치 | Windows 설치 |
-|------|------|-----------|-------------|
-| `jq` | manifest/lock JSON 편집 | `brew install jq` | `winget install jqlang.jq` |
-| `curl` | Releases 다운로드 | 기본 탑재 | 기본 탑재 |
-| `unzip` | 플러그인 zip 해제 | 기본 탑재 | PowerShell `Expand-Archive` 사용 |
-| `bash` | `scripts/install-plugins.sh` | 기본 탑재 | WSL 또는 `install-plugins.ps1` 사용 |
+| 도구    | 용도                         | macOS 설치        | Windows 설치                        |
+| ------- | ---------------------------- | ----------------- | ----------------------------------- |
+| `jq`    | manifest/lock JSON 편집      | `brew install jq` | `winget install jqlang.jq`          |
+| `curl`  | Releases 다운로드            | 기본 탑재         | 기본 탑재                           |
+| `unzip` | 플러그인 zip 해제            | 기본 탑재         | PowerShell `Expand-Archive` 사용    |
+| `bash`  | `scripts/install-plugins.sh` | 기본 탑재         | WSL 또는 `install-plugins.ps1` 사용 |
 
-### 1.2 GitHub Personal Access Token *(선택사항)*
+### 1.2 GitHub Personal Access Token _(선택사항)_
 
-> **TL;DR — 일반적인 사용에는 토큰이 필요 없습니다.** 기본 레지스트리
-> (`to-nexus/crossy-sdk-unreal-sample`) 는 **퍼블릭** 이며, install 스크립트는
-> `GITHUB_TOKEN` 이 없으면 자동으로 익명 요청으로 동작합니다.
->
-> 아래 **둘 중 하나** 에 해당할 때만 PAT 를 준비하세요:
->
-> - **Rate limit 회피**: 익명 요청은 IP 당 60회/시. 공유 CI 러너처럼 다른
->   사람과 같은 IP 를 쓰는 환경에서 한도를 초과할 때.
-> - **레지스트리를 프라이빗 레포로 교체**: `crossx-plugins.json` 의
->   `registry.repo` 를 비공개 저장소로 바꾼 경우.
+SDK Release 호스팅 레포 (`to-nexus/crossy-sdk-unreal-sample`) 는 프라이빗입니다.
+**Fine-grained PAT** 를 발급하세요:
 
-토큰이 필요하다면 가장 간단한 GitHub PAT 면 충분합니다 (퍼블릭 레포 읽기에는
-별도 scope 가 필요하지 않습니다):
+1. GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → _Generate new token_
+2. **Resource owner**: `to-nexus`
+3. **Repository access**: _Only select repositories_ → `to-nexus/crossy-sdk-unreal-sample`
+4. **Repository permissions**: `Contents` → **Read-only**
+5. 생성된 토큰을 다음 중 **한 가지 방법** 으로 주입:
 
-1. GitHub → Settings → Developer settings → **Personal access tokens (classic 또는 fine-grained 중 어느 쪽이든 OK)**
-2. 발급 후 **`.env` 파일에 입력** (권장):
+6. GitHub → Settings → Developer settings → **Personal access tokens (classic 또는 fine-grained 중 어느 쪽이든 OK)**
+7. 발급 후 **`.env` 파일에 입력** (권장):
 
    ```bash
    cp .env.example .env
@@ -63,7 +64,7 @@ Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, �
    Makefile 이 `.env` / `.env.local` 를 자동 로드합니다.
    `.env` 는 `.gitignore` 로 차단됩니다.
 
-3. 또는 셸에 export:
+8. 또는 셸에 export:
 
    ```bash
    export GITHUB_TOKEN=github_pat_xxxxxxxx     # macOS / Linux
@@ -133,8 +134,13 @@ make sdk-install
 gh release list --repo to-nexus/crossy-sdk-unreal-sample --limit 50
 ```
 
+<<<<<<< HEAD
 브라우저에서 확인 (퍼블릭 레포이므로 로그인 없이도 보입니다):
-<https://github.com/to-nexus/crossy-sdk-unreal-sample/releases>
+=======
+브라우저에서 확인:
+
+> > > > > > > 6c6a2bd3551585cefadc48c4166e35df685e3ed1
+> > > > > > > <https://github.com/to-nexus/crossy-sdk-unreal-sample/releases>
 
 ---
 
@@ -162,13 +168,13 @@ make sdk-clean && make sdk-install
 
 ### 4.3 흔한 에러
 
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| `API rate limit exceeded` | 익명 호출이 60회/시 초과 (공유 CI 러너 등) | §1.2 의 선택사항 PAT 를 `.env` 에 등록 |
-| `tag '…@v…' not found` | 버전 오타 또는 아직 미배포 | `gh release list` 로 확인 후 manifest 수정 |
-| `asset '…zip' not attached to tag` | 릴리스는 있으나 자산 부착 실패 | SDK 팀에 재업로드 요청 |
-| `.uplugin VersionName mismatch` | CI 에서 `.uplugin` 버전 주입 누락 | SDK 팀에 리빌드 요청 |
-| `Expand-Archive ... path too long` (Windows) | 경로 길이 260 초과 | 프로젝트 경로를 짧게 (C:\dev\…) |
+| 증상                                         | 원인                                       | 해결                                       |
+| -------------------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| `API rate limit exceeded`                    | 익명 호출이 60회/시 초과 (공유 CI 러너 등) | §1.2 의 선택사항 PAT 를 `.env` 에 등록     |
+| `tag '…@v…' not found`                       | 버전 오타 또는 아직 미배포                 | `gh release list` 로 확인 후 manifest 수정 |
+| `asset '…zip' not attached to tag`           | 릴리스는 있으나 자산 부착 실패             | SDK 팀에 재업로드 요청                     |
+| `.uplugin VersionName mismatch`              | CI 에서 `.uplugin` 버전 주입 누락          | SDK 팀에 리빌드 요청                       |
+| `Expand-Archive ... path too long` (Windows) | 경로 길이 260 초과                         | 프로젝트 경로를 짧게 (C:\dev\…)            |
 
 ### 4.4 로컬 개발 (SDK 소스 직접 수정 중일 때)
 
