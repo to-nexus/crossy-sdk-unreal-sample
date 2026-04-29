@@ -186,6 +186,7 @@ private:
 	void     WriteText(UEditableTextBox* Box, const FString& Text);
 	void     WriteLabel(UTextBlock* Block, const FText& Text);
 	void     SetStatus(FName Key);
+	void     SetStatusArgs(FName Key, const TMap<FString, FString>& Args);
 	void     SetStatusText(const FText& Text);
 	FString  ResolveFromAddress() const;
 	FString  ResolveChainId() const;

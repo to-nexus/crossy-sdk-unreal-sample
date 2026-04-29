@@ -1,5 +1,6 @@
 #include "UI/DappTestPanelBase.h"
 
+#include "Async/Async.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
@@ -176,6 +177,26 @@ void UDappTestPanelBase::HandleSignInResult(const FCROSSxAuthResult& Result)
 	}
 	SetStatus(TEXT("sample.auth.success"));
 	ApplyLoginState(true);
+
+	// Mirror the dev-panel UX: if sign-in succeeded but the backend reports no
+	// wallet yet (or the account needs migration), auto-trigger the wallet
+	// setup flow. The SDK's SetupWalletWithUIAsync handles both "create new
+	// wallet" and "migrate existing v1 wallet" via its built-in PIN modal —
+	// without this auto-trigger the user would only see the silent -10005
+	// "user wallet not found" error on the next GetAddress call. External
+	// teams that prefer a manual flow can either remove this block or expose
+	// Btn_CreateWallet in the WBP (which calls the same SetupWalletWithUIAsync).
+	if (Result.WalletAddress.IsEmpty())
+	{
+		if (UCROSSxSdkSubsystem* Sdk = ResolveSdk())
+		{
+			SetStatus(TEXT("sample.status.creatingWallet"));
+			FCROSSxCreateWalletDelegate Del;
+			Del.BindDynamic(this, &UDappTestPanelBase::HandleCreateWalletResult);
+			// Empty Sub → SDK falls back to the cached user sub from sign-in.
+			Sdk->SetupWalletWithUIAsync(FString(), Del);
+		}
+	}
 }
 
 void UDappTestPanelBase::OnClickSignOut()
@@ -258,7 +279,9 @@ void UDappTestPanelBase::HandleGetAddressResult(const FCROSSxGetAddressResponse&
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.address.fetchFailed"), { { TEXT("message"), Result.ErrorMessage } });
+		const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+		NotifyError(TEXT("sample.address.fetchFailed"), Args);
+		SetStatusArgs(TEXT("sample.address.fetchFailed"), Args);
 		return;
 	}
 	if (ADappActor* Actor = ResolveActor())
@@ -286,7 +309,9 @@ void UDappTestPanelBase::HandleGetAddressesResult(const FCROSSxGetAddressesRespo
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.address.listFailed"), { { TEXT("message"), Result.ErrorMessage } });
+		const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+		NotifyError(TEXT("sample.address.listFailed"), Args);
+		SetStatusArgs(TEXT("sample.address.listFailed"), Args);
 		return;
 	}
 
@@ -380,7 +405,9 @@ void UDappTestPanelBase::HandleSignTxResult(const FCROSSxSignTxResponse& Result)
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.tx.signFailed"), { { TEXT("message"), Result.ErrorMessage } });
+		const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+		NotifyError(TEXT("sample.tx.signFailed"), Args);
+		SetStatusArgs(TEXT("sample.tx.signFailed"), Args);
 		return;
 	}
 	NotifyArgs(TEXT("sample.tx.signOk"),
@@ -416,7 +443,9 @@ void UDappTestPanelBase::HandleSendTxResult(const FCROSSxSendTxResponse& Result)
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.tx.sendFailed"), { { TEXT("message"), Result.ErrorMessage } });
+		const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+		NotifyError(TEXT("sample.tx.sendFailed"), Args);
+		SetStatusArgs(TEXT("sample.tx.sendFailed"), Args);
 		return;
 	}
 	NotifyArgs(TEXT("sample.tx.sendOk"), { { TEXT("hash"), Result.TxHash } });
@@ -525,7 +554,9 @@ void UDappTestPanelBase::HandleSendTokenTxResult(const FCROSSxSendTxResponse& Re
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.token.sendFailed"), { { TEXT("message"), Result.ErrorMessage } });
+		const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+		NotifyError(TEXT("sample.token.sendFailed"), Args);
+		SetStatusArgs(TEXT("sample.token.sendFailed"), Args);
 		return;
 	}
 	NotifyArgs(TEXT("sample.token.sendOk"), { { TEXT("hash"), Result.TxHash } });
@@ -554,7 +585,9 @@ void UDappTestPanelBase::HandleSignMessageResult(const FCROSSxSignMessageRespons
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.message.signFailed"), { { TEXT("message"), Result.ErrorMessage } });
+		const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+		NotifyError(TEXT("sample.message.signFailed"), Args);
+		SetStatusArgs(TEXT("sample.message.signFailed"), Args);
 		return;
 	}
 	UE_LOG(LogDappPanel, Log, TEXT("Personal signature: %s"), *Result.Signature);
@@ -587,7 +620,9 @@ void UDappTestPanelBase::HandleSignTypedDataResult(const FCROSSxSignTypedDataRes
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.message.typedFailed"), { { TEXT("message"), Result.ErrorMessage } });
+		const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+		NotifyError(TEXT("sample.message.typedFailed"), Args);
+		SetStatusArgs(TEXT("sample.message.typedFailed"), Args);
 		return;
 	}
 	UE_LOG(LogDappPanel, Log, TEXT("Typed-data signature: %s"), *Result.Signature);
@@ -735,6 +770,20 @@ void UDappTestPanelBase::OnClickEditorSimulateDeepLink()
 
 void UDappTestPanelBase::HandleSdkReady(bool bHasActiveSession)
 {
+	// Same defensive marshal as HandleAuthChanged — the SDK initialize
+	// callback may fire from a worker thread depending on platform/adapter.
+	if (!IsInGameThread())
+	{
+		TWeakObjectPtr<UDappTestPanelBase> WeakThis(this);
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, bHasActiveSession]()
+		{
+			if (UDappTestPanelBase* Strong = WeakThis.Get())
+			{
+				Strong->HandleSdkReady(bHasActiveSession);
+			}
+		});
+		return;
+	}
 	ApplyLoginState(bHasActiveSession);
 	Notify(bHasActiveSession ? TEXT("sample.status.resumedSession")
 	                         : TEXT("sample.status.sdkReady"));
@@ -742,6 +791,23 @@ void UDappTestPanelBase::HandleSdkReady(bool bHasActiveSession)
 
 void UDappTestPanelBase::HandleAuthChanged(bool bLoggedIn)
 {
+	// SDK currently broadcasts OnAuthChanged from a worker thread (e.g.
+	// SignOutAsync's task callback). ApplyLoginState() touches Slate
+	// (SetVisibility), which asserts unless executed on the game thread.
+	// Marshal to the game thread defensively so the sample is robust against
+	// any SDK callback site that forgets to dispatch back to the main loop.
+	if (!IsInGameThread())
+	{
+		TWeakObjectPtr<UDappTestPanelBase> WeakThis(this);
+		AsyncTask(ENamedThreads::GameThread, [WeakThis, bLoggedIn]()
+		{
+			if (UDappTestPanelBase* Strong = WeakThis.Get())
+			{
+				Strong->ApplyLoginState(bLoggedIn);
+			}
+		});
+		return;
+	}
 	ApplyLoginState(bLoggedIn);
 }
 
@@ -847,6 +913,18 @@ void UDappTestPanelBase::SetStatus(FName Key)
 	if (UDappLocalizationSubsystem* Loc = ResolveLoc())
 	{
 		SetStatusText(Loc->GetText(Key));
+	}
+	else
+	{
+		SetStatusText(FText::FromName(Key));
+	}
+}
+
+void UDappTestPanelBase::SetStatusArgs(FName Key, const TMap<FString, FString>& Args)
+{
+	if (UDappLocalizationSubsystem* Loc = ResolveLoc())
+	{
+		SetStatusText(Loc->Format(Key, Args));
 	}
 	else
 	{
