@@ -93,6 +93,13 @@ void ADappActor::BeginPlay()
 
 	Sdk->Configure(Config);
 
+	// Enable the SDK-provided "review-and-confirm" sheet for personal_sign /
+	// signTypedData / sign+send transaction flows. The third arg keeps the dApp
+	// theme as-is (no override). Beyond UX, this also activates the SDK's
+	// invalid-password retry path so a wrong PIN automatically re-prompts via
+	// the verify-PIN modal (mirrors the in-SDK dApp test panel).
+	Sdk->EnableSignConfirmation(Config.AppName, Config.Theme, false);
+
 	// SDK locale mirrors UI locale. Initialize from the currently active Dapp
 	// language so the very first SDK modal (e.g. sign-in) is already localized.
 	if (UDappLocalizationSubsystem* Loc = ResolveLocalization())
