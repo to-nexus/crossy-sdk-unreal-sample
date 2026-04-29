@@ -1,3 +1,18 @@
 {
-  "plugins": {}
+  "plugins": {
+    "CROSSxSdkUnrealPlugin": {
+      "version": "0.0.0-beta.6",
+      "tag": "CROSSxSdkUnrealPlugin@v0.0.0-beta.6",
+      "asset": "CROSSxSdkUnrealPlugin-0.0.0-beta.6.zip",
+      "sha256": "ebd70d4e642935a5ba559d8e9d5ec94632d231f5033bf40fe0be55145bd1b5fb",
+      "installed_at": "2026-04-29T02:51:17Z"
+    },
+    "CROSSxRampSdkUnrealPlugin": {
+      "version": "0.0.0-beta.4",
+      "tag": "CROSSxRampSdkUnrealPlugin@v0.0.0-beta.4",
+      "asset": "CROSSxRampSdkUnrealPlugin-0.0.0-beta.4.zip",
+      "sha256": "3b9392931cbfc84566c920082cc8f12f43c60e16ad4265491238d152484d52ec",
+      "installed_at": "2026-04-29T02:51:18Z"
+    }
+  }
 }

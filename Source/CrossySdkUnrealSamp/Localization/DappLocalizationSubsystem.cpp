@@ -3,6 +3,7 @@
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
 #include "HAL/PlatformFileManager.h"
+#include "Internationalization/Culture.h"
 #include "Internationalization/Internationalization.h"
 #include "Misc/ConfigCacheIni.h"
 #include "UObject/ConstructorHelpers.h"
@@ -123,7 +124,7 @@ void UDappLocalizationSubsystem::PersistLanguage() const
 	GConfig->Flush(false, GGameUserSettingsIni);
 }
 
-void UDappLocalizationSubsystem::ResolveDefaultTableIfNeeded()
+void UDappLocalizationSubsystem::ResolveDefaultTableIfNeeded() const
 {
 	if (StringTable) { return; }
 
@@ -132,10 +133,6 @@ void UDappLocalizationSubsystem::ResolveDefaultTableIfNeeded()
 	UDataTable* Loaded = LoadObject<UDataTable>(nullptr, DefaultStringTablePath);
 	if (Loaded)
 	{
-		// Cast away constness is unsafe; instead use const_cast only when we know
-		// Initialize / GetText are called outside of a multithreaded path. Writing
-		// through a mutable pointer is safe here because StringTable is only
-		// assigned from Initialize or SetStringTable.
-		const_cast<UDappLocalizationSubsystem*>(this)->StringTable = Loaded;
+		StringTable = Loaded;
 	}
 }

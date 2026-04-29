@@ -83,10 +83,13 @@ private:
 
 	void LoadPersistedLanguage();
 	void PersistLanguage() const;
-	void ResolveDefaultTableIfNeeded();
+	// Lazy-loads the default string table on first access. Called from both
+	// Initialize() and the const GetText() path, so it is itself const and
+	// writes through the `mutable` StringTable member.
+	void ResolveDefaultTableIfNeeded() const;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UDataTable> StringTable = nullptr;
+	mutable TObjectPtr<UDataTable> StringTable = nullptr;
 
 	UPROPERTY(Transient)
 	EDappLang CurrentLang = EDappLang::KO;

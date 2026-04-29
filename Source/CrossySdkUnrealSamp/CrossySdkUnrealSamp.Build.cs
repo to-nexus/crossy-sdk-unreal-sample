@@ -25,5 +25,10 @@ public class CrossySdkUnrealSamp : ModuleRules
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
+
+		// Allow sub-directory-prefixed includes (e.g. "UI/DappTestPanelBase.h",
+		// "Localization/DappLocalizationSubsystem.h"). We don't use the
+		// Public/Private split, so the module root must be on the include path.
+		PrivateIncludePaths.Add(ModuleDirectory);
 	}
 }
