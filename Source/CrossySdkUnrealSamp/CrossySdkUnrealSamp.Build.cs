@@ -24,7 +24,12 @@ public class CrossySdkUnrealSamp : ModuleRules
 			"CROSSxRampSdkUnrealPlugin"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		// HTTP brings in FGenericPlatformHttp::UrlEncode, used by
+		// OnClickUseRamp() to build the demo Ramp URL when the user leaves
+		// the URL field blank. Header is in Engine/Source/Runtime/Online/HTTP/
+		// Public/GenericPlatform/GenericPlatformHttp.h, but the symbol body
+		// only ships in the HTTP module, hence this dep.
+		PrivateDependencyModuleNames.AddRange(new string[] { "HTTP" });
 
 		// Allow sub-directory-prefixed includes (e.g. "UI/DappTestPanelBase.h",
 		// "Localization/DappLocalizationSubsystem.h"). We don't use the

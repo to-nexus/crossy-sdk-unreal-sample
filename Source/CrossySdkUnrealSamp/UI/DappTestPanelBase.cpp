@@ -2,10 +2,12 @@
 
 #include "Async/Async.h"
 #include "Components/Button.h"
+#include "Components/ContentWidget.h"
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
+#include "GenericPlatform/GenericPlatformHttp.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 #include "Dapp/DappActor.h"
@@ -48,9 +50,14 @@ void UDappTestPanelBase::NativeConstruct()
 	if (UDappLocalizationSubsystem* Loc = ResolveLoc())
 	{
 		Loc->OnLanguageChanged.AddDynamic(this, &UDappTestPanelBase::HandleLanguageChanged);
+		// Seed both the SDK locale and the language indicator label from the
+		// persisted dApp language so the very first paint matches the toggle.
+		HandleLanguageChanged(Loc->GetLanguage());
 	}
-
-	RefreshLocalizedLabels();
+	else
+	{
+		RefreshLocalizedLabels();
+	}
 	ApplyLoginState(bLastKnownLoggedIn);
 }
 
@@ -147,9 +154,11 @@ void UDappTestPanelBase::HandleSignInResult(const FCROSSxAuthResult& Result)
 {
 	if (!Result.bSuccess)
 	{
-		NotifyError(TEXT("sample.auth.failed"),
-			{ { TEXT("message"), Result.ErrorMessage.IsEmpty() ? TEXT("unknown") : Result.ErrorMessage } });
-		SetStatus(TEXT("sample.auth.failed"));
+		{
+			const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage.IsEmpty() ? TEXT("unknown") : Result.ErrorMessage } };
+			NotifyError(TEXT("sample.auth.failed"), Args);
+			SetStatusArgs(TEXT("sample.auth.failed"), Args);
+		}
 		return;
 	}
 
@@ -183,19 +192,21 @@ void UDappTestPanelBase::HandleSignInResult(const FCROSSxAuthResult& Result)
 	// setup flow. The SDK's SetupWalletWithUIAsync handles both "create new
 	// wallet" and "migrate existing v1 wallet" via its built-in PIN modal —
 	// without this auto-trigger the user would only see the silent -10005
-	// "user wallet not found" error on the next GetAddress call. External
-	// teams that prefer a manual flow can either remove this block or expose
-	// Btn_CreateWallet in the WBP (which calls the same SetupWalletWithUIAsync).
+	// "user wallet not found" error on the next GetAddress call.
+	//
+	// Note on Google/Apple paths: OnClickLoginGoogle/Apple call
+	// SignInWithCreateAsync, which already chains SetupWalletWithUIAsync
+	// inside the SDK on success. In that case Result.WalletAddress will be
+	// populated by the time we land here and this block becomes a no-op.
+	// The check below also covers the OnClickLogin (provider-picker UI)
+	// path, which uses the plain SignInWithUIAsync and *doesn't* auto-set
+	// up a wallet — that path needs the explicit trigger below.
 	if (Result.WalletAddress.IsEmpty())
 	{
-		if (UCROSSxSdkSubsystem* Sdk = ResolveSdk())
-		{
-			SetStatus(TEXT("sample.status.creatingWallet"));
-			FCROSSxCreateWalletDelegate Del;
-			Del.BindDynamic(this, &UDappTestPanelBase::HandleCreateWalletResult);
-			// Empty Sub → SDK falls back to the cached user sub from sign-in.
-			Sdk->SetupWalletWithUIAsync(FString(), Del);
-		}
+		// Reuses the same retry plumbing as the sign-message flow. Pending
+		// action stays None — auto-setup right after sign-in is a one-shot,
+		// the user re-clicks whatever feature they wanted next.
+		EnsureWalletSetup(EPendingWalletAction::None);
 	}
 }
 
@@ -233,24 +244,26 @@ void UDappTestPanelBase::HandleSignOutResult(bool bSuccess)
 
 void UDappTestPanelBase::OnClickCreateWallet()
 {
-	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
-	if (!Sdk) { return; }
-	SetStatus(TEXT("sample.status.creatingWallet"));
-	FCROSSxCreateWalletDelegate Del;
-	Del.BindDynamic(this, &UDappTestPanelBase::HandleCreateWalletResult);
-
-	// SetupWalletWithUIAsync uses the SDK's own PIN modal flow — no custom UI
-	// needed here. Passing empty Sub makes the SDK fall back to the cached
-	// user sub from the last sign-in.
-	Sdk->SetupWalletWithUIAsync(FString(), Del);
+	// Single entry point, shared with auto-setup from HandleSignInResult and
+	// the sign-message wallet-required branch. Passing the cached Sub
+	// explicitly (vs FString()) avoids a race where SDK's internal fallback
+	// reads a stale auth cache mid-migration and writes the wallet password
+	// against a different identity than the one used at sign-time.
+	EnsureWalletSetup(EPendingWalletAction::None);
 }
 
 void UDappTestPanelBase::HandleCreateWalletResult(const FCROSSxCreateWalletResult& Result)
 {
 	if (!Result.ErrorMessage.IsEmpty())
 	{
-		NotifyError(TEXT("sample.wallet.createFailed"), { { TEXT("message"), Result.ErrorMessage } });
-		SetStatus(TEXT("sample.wallet.createFailed"));
+		// Bail without retry — user typically cancels or hits a backend
+		// error, replaying the sign-message would just spam the same modal.
+		PendingWalletAction = EPendingWalletAction::None;
+		{
+			const TMap<FString, FString> Args = { { TEXT("message"), Result.ErrorMessage } };
+			NotifyError(TEXT("sample.wallet.createFailed"), Args);
+			SetStatusArgs(TEXT("sample.wallet.createFailed"), Args);
+		}
 		return;
 	}
 
@@ -260,9 +273,16 @@ void UDappTestPanelBase::HandleCreateWalletResult(const FCROSSxCreateWalletResul
 	}
 	WriteLabel(Txt_WalletAddress, FText::FromString(Result.Address));
 	WriteText(Inp_From,           Result.Address);
-	NotifyArgs(TEXT("sample.wallet.createSuccess"),
-		{ { TEXT("address"), ShortenAddress(Result.Address) } });
-	SetStatus(TEXT("sample.wallet.createSuccess"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("address"), ShortenAddress(Result.Address) } };
+		NotifyArgs(TEXT("sample.wallet.createSuccess"), Args);
+		SetStatusArgs(TEXT("sample.wallet.createSuccess"), Args);
+	}
+
+	// Replay whatever button kicked off the auto-setup so the user
+	// experiences a single fluid flow (mirrors CROSSxSdkTestPanelWidget's
+	// EnsureFromAddressThen lambda chain).
+	RetryPendingWalletAction();
 }
 
 void UDappTestPanelBase::OnClickGetAddress()
@@ -290,9 +310,11 @@ void UDappTestPanelBase::HandleGetAddressResult(const FCROSSxGetAddressResponse&
 	}
 	WriteLabel(Txt_WalletAddress, FText::FromString(Result.Address));
 	WriteText(Inp_From,           Result.Address);
-	NotifyArgs(TEXT("sample.address.fetched"),
-		{ { TEXT("address"), ShortenAddress(Result.Address) } });
-	SetStatus(TEXT("sample.address.fetched"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("address"), ShortenAddress(Result.Address) } };
+		NotifyArgs(TEXT("sample.address.fetched"), Args);
+		SetStatusArgs(TEXT("sample.address.fetched"), Args);
+	}
 }
 
 void UDappTestPanelBase::OnClickGetAllAddresses()
@@ -322,9 +344,11 @@ void UDappTestPanelBase::HandleGetAddressesResult(const FCROSSxGetAddressesRespo
 	}
 	UE_LOG(LogDappPanel, Log, TEXT("Addresses:\n%s"), *Summary);
 
-	NotifyArgs(TEXT("sample.address.listOk"),
-		{ { TEXT("count"), FString::FromInt(Result.Addresses.Num()) } });
-	SetStatus(TEXT("sample.address.listOk"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("count"), FString::FromInt(Result.Addresses.Num()) } };
+		NotifyArgs(TEXT("sample.address.listOk"), Args);
+		SetStatusArgs(TEXT("sample.address.listOk"), Args);
+	}
 }
 
 void UDappTestPanelBase::OnClickSelectWallet()
@@ -362,7 +386,14 @@ void UDappTestPanelBase::OnClickGetNativeBalance()
 	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
 	if (!Sdk) { return; }
 	const FString From = ResolveFromAddress();
-	if (From.IsEmpty()) { NotifyError(TEXT("sample.tx.noWallet"), {}); return; }
+	if (From.IsEmpty())
+	{
+		// Native-balance read also needs an address; trigger the same
+		// SetupWallet flow but don't auto-retry — balance lookup is cheap
+		// enough to re-click manually after the wallet exists.
+		EnsureWalletSetup(EPendingWalletAction::None);
+		return;
+	}
 
 	SetStatus(TEXT("sample.status.loading"));
 	FCROSSxStringDelegate Del;
@@ -373,8 +404,11 @@ void UDappTestPanelBase::OnClickGetNativeBalance()
 void UDappTestPanelBase::HandleNativeBalanceResult(const FString& HexBalance)
 {
 	const FString Dec = DappErc20Codec::DecodeUint256BalanceHex(HexBalance, 18);
-	NotifyArgs(TEXT("sample.tx.nativeBalance"), { { TEXT("amount"), Dec } });
-	SetStatus(TEXT("sample.tx.nativeBalance"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("amount"), Dec } };
+		NotifyArgs(TEXT("sample.tx.nativeBalance"), Args);
+		SetStatusArgs(TEXT("sample.tx.nativeBalance"), Args);
+	}
 }
 
 void UDappTestPanelBase::OnClickSignTx()
@@ -388,8 +422,17 @@ void UDappTestPanelBase::OnClickSignTx()
 	Tx.To      = ReadText(Inp_To);
 	Tx.Value   = ReadText(Inp_Value, DefaultTxValueWei);
 	Tx.Data    = ReadText(Inp_Data);
+	// Empty data fields must be normalized to "0x" — some chains/RPCs
+	// reject the unsigned tx envelope when `data` is the empty string.
+	// Mirrors CROSSxSdkTestPanelWidget::BuildUnsignedTxFromInputs.
+	if (Tx.Data.IsEmpty()) { Tx.Data = TEXT("0x"); }
 
-	if (Tx.From.IsEmpty() || Tx.To.IsEmpty())
+	if (Tx.From.IsEmpty())
+	{
+		EnsureWalletSetup(EPendingWalletAction::SignTx);
+		return;
+	}
+	if (Tx.To.IsEmpty())
 	{
 		NotifyError(TEXT("sample.tx.invalidInput"), {});
 		return;
@@ -398,7 +441,7 @@ void UDappTestPanelBase::OnClickSignTx()
 	SetStatus(TEXT("sample.status.signing"));
 	FCROSSxSignTxDelegate Del;
 	Del.BindDynamic(this, &UDappTestPanelBase::HandleSignTxResult);
-	Sdk->SignTransactionWithUIAsync(Tx, Tx.ChainId, Del);
+	Sdk->SignTransactionWithUIAsync(Tx, Tx.ChainId, Del, ResolveDappName());
 }
 
 void UDappTestPanelBase::HandleSignTxResult(const FCROSSxSignTxResponse& Result)
@@ -410,9 +453,11 @@ void UDappTestPanelBase::HandleSignTxResult(const FCROSSxSignTxResponse& Result)
 		SetStatusArgs(TEXT("sample.tx.signFailed"), Args);
 		return;
 	}
-	NotifyArgs(TEXT("sample.tx.signOk"),
-		{ { TEXT("hash"), Result.TxHash.IsEmpty() ? TEXT("(local)") : Result.TxHash } });
-	SetStatus(TEXT("sample.tx.signOk"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("hash"), Result.TxHash.IsEmpty() ? TEXT("(local)") : Result.TxHash } };
+		NotifyArgs(TEXT("sample.tx.signOk"), Args);
+		SetStatusArgs(TEXT("sample.tx.signOk"), Args);
+	}
 }
 
 void UDappTestPanelBase::OnClickSendTx()
@@ -426,8 +471,14 @@ void UDappTestPanelBase::OnClickSendTx()
 	Tx.To      = ReadText(Inp_To);
 	Tx.Value   = ReadText(Inp_Value, DefaultTxValueWei);
 	Tx.Data    = ReadText(Inp_Data);
+	if (Tx.Data.IsEmpty()) { Tx.Data = TEXT("0x"); }
 
-	if (Tx.From.IsEmpty() || Tx.To.IsEmpty())
+	if (Tx.From.IsEmpty())
+	{
+		EnsureWalletSetup(EPendingWalletAction::SendTx);
+		return;
+	}
+	if (Tx.To.IsEmpty())
 	{
 		NotifyError(TEXT("sample.tx.invalidInput"), {});
 		return;
@@ -436,7 +487,7 @@ void UDappTestPanelBase::OnClickSendTx()
 	SetStatus(TEXT("sample.status.sending"));
 	FCROSSxSendTxDelegate Del;
 	Del.BindDynamic(this, &UDappTestPanelBase::HandleSendTxResult);
-	Sdk->SendTransactionWithUIAsync(Tx, Tx.ChainId, Del);
+	Sdk->SendTransactionWithUIAsync(Tx, Tx.ChainId, Del, ResolveDappName());
 }
 
 void UDappTestPanelBase::HandleSendTxResult(const FCROSSxSendTxResponse& Result)
@@ -448,8 +499,11 @@ void UDappTestPanelBase::HandleSendTxResult(const FCROSSxSendTxResponse& Result)
 		SetStatusArgs(TEXT("sample.tx.sendFailed"), Args);
 		return;
 	}
-	NotifyArgs(TEXT("sample.tx.sendOk"), { { TEXT("hash"), Result.TxHash } });
-	SetStatus(TEXT("sample.tx.sendOk"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("hash"), Result.TxHash } };
+		NotifyArgs(TEXT("sample.tx.sendOk"), Args);
+		SetStatusArgs(TEXT("sample.tx.sendOk"), Args);
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -463,7 +517,15 @@ void UDappTestPanelBase::OnClickGetTokenBalance()
 
 	const FString From     = ResolveFromAddress();
 	const FString Contract = ReadText(Inp_TokenContract);
-	if (From.IsEmpty() || Contract.IsEmpty())
+	if (From.IsEmpty())
+	{
+		// Same fluid retry as Sign* handlers — surface the SDK setup modal
+		// on first use, then re-fire this button so the user gets their
+		// balance without a second click.
+		EnsureWalletSetup(EPendingWalletAction::GetTokenBalance);
+		return;
+	}
+	if (Contract.IsEmpty())
 	{
 		NotifyError(TEXT("sample.token.invalidInput"), {});
 		return;
@@ -509,8 +571,11 @@ void UDappTestPanelBase::HandleTokenBalanceRpcResult(const FCROSSxJsonRpcRespons
 	Hex.RemoveFromEnd(TEXT("\""));
 	const FString Dec = DappErc20Codec::DecodeUint256BalanceHex(Hex, PendingTokenBalanceDecimals);
 
-	NotifyArgs(TEXT("sample.token.balance"), { { TEXT("amount"), Dec } });
-	SetStatus(TEXT("sample.token.balance"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("amount"), Dec } };
+		NotifyArgs(TEXT("sample.token.balance"), Args);
+		SetStatusArgs(TEXT("sample.token.balance"), Args);
+	}
 }
 
 void UDappTestPanelBase::OnClickSendToken()
@@ -524,7 +589,12 @@ void UDappTestPanelBase::OnClickSendToken()
 	const FString Amount    = ReadText(Inp_TokenAmount);
 	const int32   Decimals  = ResolveTokenDecimals();
 
-	if (From.IsEmpty() || Contract.IsEmpty() || To.IsEmpty() || Amount.IsEmpty())
+	if (From.IsEmpty())
+	{
+		EnsureWalletSetup(EPendingWalletAction::SendToken);
+		return;
+	}
+	if (Contract.IsEmpty() || To.IsEmpty() || Amount.IsEmpty())
 	{
 		NotifyError(TEXT("sample.token.invalidInput"), {});
 		return;
@@ -547,7 +617,10 @@ void UDappTestPanelBase::OnClickSendToken()
 	SetStatus(TEXT("sample.status.sending"));
 	FCROSSxSendTxDelegate Del;
 	Del.BindDynamic(this, &UDappTestPanelBase::HandleSendTokenTxResult);
-	Sdk->SendTransactionWithUIAsync(Tx, Tx.ChainId, Del);
+	// Demo passes Amount = "-" for ERC-20 transfers because the on-chain
+	// `value` is always 0x0 (the real amount lives in the `data` payload).
+	// Surfacing the dash hides a misleading "0 native" line in the modal.
+	Sdk->SendTransactionWithUIAsync(Tx, Tx.ChainId, Del, ResolveDappName(), TEXT("-"));
 }
 
 void UDappTestPanelBase::HandleSendTokenTxResult(const FCROSSxSendTxResponse& Result)
@@ -559,8 +632,11 @@ void UDappTestPanelBase::HandleSendTokenTxResult(const FCROSSxSendTxResponse& Re
 		SetStatusArgs(TEXT("sample.token.sendFailed"), Args);
 		return;
 	}
-	NotifyArgs(TEXT("sample.token.sendOk"), { { TEXT("hash"), Result.TxHash } });
-	SetStatus(TEXT("sample.token.sendOk"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("hash"), Result.TxHash } };
+		NotifyArgs(TEXT("sample.token.sendOk"), Args);
+		SetStatusArgs(TEXT("sample.token.sendOk"), Args);
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -572,13 +648,24 @@ void UDappTestPanelBase::OnClickSignPersonalMessage()
 	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
 	if (!Sdk) { return; }
 	const FString From = ResolveFromAddress();
-	if (From.IsEmpty()) { NotifyError(TEXT("sample.tx.noWallet"), {}); return; }
+	if (From.IsEmpty())
+	{
+		// Mirror CROSSxSdkTestPanelWidget::HandleSignMessageClicked → the
+		// dev-panel demo auto-runs SetupWalletWithUIAsync (which surfaces
+		// the SDK's "create wallet" or "migrate v1 wallet" modal) and
+		// retries the original button on success. Without this branch the
+		// button feels dead to first-time users that haven't migrated.
+		EnsureWalletSetup(EPendingWalletAction::SignPersonalMessage);
+		return;
+	}
 
 	const FString Message = ReadText(Inp_SignMessage, DefaultSignMessage);
 	SetStatus(TEXT("sample.status.signing"));
 	FCROSSxSignMessageDelegate Del;
 	Del.BindDynamic(this, &UDappTestPanelBase::HandleSignMessageResult);
-	Sdk->SignMessageWithUIAsync(Message, ResolveChainId(), From, Del);
+	// Pass DappName so the SDK's sign-confirmation modal can render the
+	// correct dApp identity (matches CROSSxSdkTestPanelWidget's call site).
+	Sdk->SignMessageWithUIAsync(Message, ResolveChainId(), From, Del, ResolveDappName());
 }
 
 void UDappTestPanelBase::HandleSignMessageResult(const FCROSSxSignMessageResponse& Result)
@@ -591,9 +678,11 @@ void UDappTestPanelBase::HandleSignMessageResult(const FCROSSxSignMessageRespons
 		return;
 	}
 	UE_LOG(LogDappPanel, Log, TEXT("Personal signature: %s"), *Result.Signature);
-	NotifyArgs(TEXT("sample.message.signOk"),
-		{ { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } });
-	SetStatus(TEXT("sample.message.signOk"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } };
+		NotifyArgs(TEXT("sample.message.signOk"), Args);
+		SetStatusArgs(TEXT("sample.message.signOk"), Args);
+	}
 }
 
 void UDappTestPanelBase::OnClickSignTypedData()
@@ -601,7 +690,11 @@ void UDappTestPanelBase::OnClickSignTypedData()
 	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
 	if (!Sdk) { return; }
 	const FString From = ResolveFromAddress();
-	if (From.IsEmpty()) { NotifyError(TEXT("sample.tx.noWallet"), {}); return; }
+	if (From.IsEmpty())
+	{
+		EnsureWalletSetup(EPendingWalletAction::SignTypedData);
+		return;
+	}
 
 	const FString TypedJson = ReadText(Inp_SignTypedData, DefaultTypedDataJson);
 	if (TypedJson.TrimStartAndEnd().IsEmpty())
@@ -613,7 +706,10 @@ void UDappTestPanelBase::OnClickSignTypedData()
 	SetStatus(TEXT("sample.status.signing"));
 	FCROSSxSignTypedDataDelegate Del;
 	Del.BindDynamic(this, &UDappTestPanelBase::HandleSignTypedDataResult);
-	Sdk->SignTypedDataWithUIAsync(From, TypedJson, ResolveChainId(), Del);
+	// DappName populates the EIP-712 confirmation modal title (matches
+	// CROSSxSdkTestPanelWidget). Without it the SDK shows an empty header
+	// and external dApps can't be visually distinguished.
+	Sdk->SignTypedDataWithUIAsync(From, TypedJson, ResolveChainId(), Del, ResolveDappName());
 }
 
 void UDappTestPanelBase::HandleSignTypedDataResult(const FCROSSxSignTypedDataResponse& Result)
@@ -626,9 +722,11 @@ void UDappTestPanelBase::HandleSignTypedDataResult(const FCROSSxSignTypedDataRes
 		return;
 	}
 	UE_LOG(LogDappPanel, Log, TEXT("Typed-data signature: %s"), *Result.Signature);
-	NotifyArgs(TEXT("sample.message.typedOk"),
-		{ { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } });
-	SetStatus(TEXT("sample.message.typedOk"));
+	{
+		const TMap<FString, FString> Args = { { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } };
+		NotifyArgs(TEXT("sample.message.typedOk"), Args);
+		SetStatusArgs(TEXT("sample.message.typedOk"), Args);
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -656,18 +754,19 @@ void UDappTestPanelBase::OnClickRefreshToken()
 
 void UDappTestPanelBase::HandleRefreshTokenResult(const FCROSSxRefreshTokenResult& Result)
 {
-	// FCROSSxRefreshTokenResult's exact shape is SDK-defined; we rely on its
-	// string representation for logging and a binary success for the user.
-	if (Result.ErrorMessage.IsEmpty())
-	{
-		Notify(TEXT("sample.session.refreshOk"));
-		SetStatus(TEXT("sample.session.refreshOk"));
-	}
-	else
+	// FCROSSxRefreshTokenResult::IsError() checks ErrorCode != 0 — relying
+	// on ErrorMessage alone misclassifies failures whose message field
+	// happens to be empty (e.g. transport timeouts surfacing only a code).
+	if (Result.IsError())
 	{
 		NotifyError(TEXT("sample.session.refreshFailed"),
-			{ { TEXT("message"), Result.ErrorMessage } });
+			{ { TEXT("message"), Result.ErrorMessage.IsEmpty()
+				? FString::Printf(TEXT("code=%d"), Result.ErrorCode)
+				: Result.ErrorMessage } });
+		return;
 	}
+	Notify(TEXT("sample.session.refreshOk"));
+	SetStatus(TEXT("sample.session.refreshOk"));
 }
 
 void UDappTestPanelBase::OnClickGetUserInfo()
@@ -688,11 +787,15 @@ void UDappTestPanelBase::HandleGetUserInfoResult(const FCROSSxSdkUserInfo& Info)
 		return;
 	}
 	WriteLabel(Txt_UserId, FText::FromString(Info.Id));
-	NotifyArgs(TEXT("sample.common.userInfoOk"),
-		{ { TEXT("userId"), Info.Id },
-		  { TEXT("email"),  Info.Email },
-		  { TEXT("type"),   Info.LoginType } });
-	SetStatus(TEXT("sample.common.userInfoOk"));
+	{
+		const TMap<FString, FString> Args = {
+			{ TEXT("userId"), Info.Id },
+			{ TEXT("email"),  Info.Email },
+			{ TEXT("type"),   Info.LoginType }
+		};
+		NotifyArgs(TEXT("sample.common.userInfoOk"), Args);
+		SetStatusArgs(TEXT("sample.common.userInfoOk"), Args);
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -708,11 +811,21 @@ void UDappTestPanelBase::OnClickUseRamp()
 		return;
 	}
 
-	const FString Url = ReadText(Inp_RampUrl);
+	// Mirrors CROSSxSdkTestPanelWidget::BuildSampleRampUrl — when the user
+	// leaves the URL input blank, fall back to the SDK demo's stage ramp
+	// URL with placeholders the SDK substitutes (dappSessionId,
+	// dappAccessToken). External teams overriding for production should
+	// set Inp_RampUrl in the WBP defaults or hard-code their own here.
+	FString Url = ReadText(Inp_RampUrl).TrimStartAndEnd();
 	if (Url.IsEmpty())
 	{
-		NotifyError(TEXT("sample.ramp.noUrl"), {});
-		return;
+		const FString BaseUrl     = TEXT("https://stg-ramp.crosstoken.io/exchange");
+		const FString Uuid        = FGenericPlatformHttp::UrlEncode(TEXT("sonny"));
+		const FString SessionId   = FGenericPlatformHttp::UrlEncode(TEXT("{{dappSessionId}}"));
+		const FString AccessToken = FGenericPlatformHttp::UrlEncode(TEXT("{{dappAccessToken}}"));
+		const FString Network     = FGenericPlatformHttp::UrlEncode(TEXT("testnet"));
+		Url = FString::Printf(TEXT("%s?uuid=%s&sessionId=%s&accessToken=%s&network=%s"),
+			*BaseUrl, *Uuid, *SessionId, *AccessToken, *Network);
 	}
 
 	SetStatus(TEXT("sample.status.openingRamp"));
@@ -750,6 +863,22 @@ void UDappTestPanelBase::OnClickToggleLanguage()
 
 void UDappTestPanelBase::HandleLanguageChanged(EDappLang NewLanguage)
 {
+	// Mirror the dApp-level language toggle into the SDK's own locale store
+	// via the public subsystem API. The SDK ships its own modals (PIN, wallet
+	// setup, sign confirmation, …) localized through FCROSSxSdkLocalization;
+	// without this round-trip the dApp's KO/EN button would only retitle
+	// sample labels while every SDK modal stayed in English.
+	//
+	// Architecture: dApp keys (sample.*) live in DT_DappStrings and are
+	// resolved by UDappLocalizationSubsystem; SDK keys (sdk.*) live in the
+	// plugin's Resources/Localization JSON and are resolved by
+	// FCROSSxSdkLocalization. The dApp owns the language state and pushes it
+	// down via UCROSSxSdkSubsystem::SetLocale on every toggle.
+	if (UCROSSxSdkSubsystem* Sdk = ResolveSdk())
+	{
+		Sdk->SetLocale(NewLanguage == EDappLang::EN ? TEXT("en") : TEXT("ko"));
+	}
+
 	RefreshLocalizedLabels();
 	if (Txt_Language)
 	{
@@ -787,6 +916,18 @@ void UDappTestPanelBase::HandleSdkReady(bool bHasActiveSession)
 	ApplyLoginState(bHasActiveSession);
 	Notify(bHasActiveSession ? TEXT("sample.status.resumedSession")
 	                         : TEXT("sample.status.sdkReady"));
+
+	// Mirror the dev-panel demo's HandleInitializeCompleted: when a cached
+	// session is restored but the wallet was never created (or only exists
+	// as a v1 record that needs migration), surface the SDK's setup modal
+	// immediately. Without this, users on second launch see the resumed-
+	// session banner but no migration prompt — they have to click any
+	// wallet-needing button (e.g. Sign Message) before EnsureWalletSetup
+	// fires from the per-action guard.
+	if (bHasActiveSession && ResolveFromAddress().IsEmpty())
+	{
+		EnsureWalletSetup(EPendingWalletAction::None);
+	}
 }
 
 void UDappTestPanelBase::HandleAuthChanged(bool bLoggedIn)
@@ -811,13 +952,81 @@ void UDappTestPanelBase::HandleAuthChanged(bool bLoggedIn)
 	ApplyLoginState(bLoggedIn);
 }
 
+namespace
+{
+	// Recursively descend the widget tree until we find the first TextBlock.
+	// UMG buttons are usually `UButton > UTextBlock` (single-text label) but
+	// designers occasionally wrap content in HBox/SizeBox/etc. — we still
+	// want the label to follow the language toggle in those cases.
+	UTextBlock* FindFirstTextBlockIn(UWidget* Root)
+	{
+		if (!Root) { return nullptr; }
+		if (UTextBlock* Direct = Cast<UTextBlock>(Root)) { return Direct; }
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Root))
+		{
+			for (int32 i = 0; i < Panel->GetChildrenCount(); ++i)
+			{
+				if (UTextBlock* Found = FindFirstTextBlockIn(Panel->GetChildAt(i)))
+				{
+					return Found;
+				}
+			}
+		}
+		else if (UContentWidget* Content = Cast<UContentWidget>(Root))
+		{
+			return FindFirstTextBlockIn(Content->GetContent());
+		}
+		return nullptr;
+	}
+
+	// Push a localized label into the first text block under a button. No-op
+	// when either the button or the text block is missing — this keeps the
+	// helper safe to call even on WBPs that omit some buttons (BindWidgetOptional).
+	void ApplyButtonLabel(UButton* Btn, UDappLocalizationSubsystem* Loc, FName Key)
+	{
+		if (!Btn || !Loc) { return; }
+		if (UTextBlock* Label = FindFirstTextBlockIn(Btn))
+		{
+			Label->SetText(Loc->GetText(Key));
+		}
+	}
+}
+
 void UDappTestPanelBase::RefreshLocalizedLabels()
 {
-	// Bound widgets' labels are authored in the WBP. External teams can either:
-	//   (a) leave the BP text static and only localize via Txt_* display blocks, or
-	//   (b) override this function in a BP subclass to push localized text into
-	//       specific buttons.
-	// Intentionally no-op in C++ to avoid dictating WBP text-binding choices.
+	UDappLocalizationSubsystem* Loc = ResolveLoc();
+	if (Loc)
+	{
+		// Button labels — keys live in DT_DappStrings under sample.button.*.
+		// Add new rows there to localize additional buttons; widget-name based
+		// lookup means we don't need a per-button BP override.
+		ApplyButtonLabel(Btn_Login,                  Loc, TEXT("sample.button.login"));
+		ApplyButtonLabel(Btn_LoginGoogle,            Loc, TEXT("sample.button.loginGoogle"));
+		ApplyButtonLabel(Btn_LoginApple,             Loc, TEXT("sample.button.loginApple"));
+		ApplyButtonLabel(Btn_UseRamp,                Loc, TEXT("sample.button.useRamp"));
+		ApplyButtonLabel(Btn_CreateWallet,           Loc, TEXT("sample.button.createWallet"));
+		ApplyButtonLabel(Btn_GetAddress,             Loc, TEXT("sample.button.getAddress"));
+		ApplyButtonLabel(Btn_GetAllAddresses,        Loc, TEXT("sample.button.getAllAddresses"));
+		ApplyButtonLabel(Btn_SelectWallet,           Loc, TEXT("sample.button.selectWallet"));
+		ApplyButtonLabel(Btn_GetNativeBalance,       Loc, TEXT("sample.button.getNativeBalance"));
+		ApplyButtonLabel(Btn_SignTx,                 Loc, TEXT("sample.button.signTx"));
+		ApplyButtonLabel(Btn_SendTx,                 Loc, TEXT("sample.button.sendTx"));
+		ApplyButtonLabel(Btn_GetTokenBalance,        Loc, TEXT("sample.button.getTokenBalance"));
+		ApplyButtonLabel(Btn_SendToken,              Loc, TEXT("sample.button.sendToken"));
+		ApplyButtonLabel(Btn_SignPersonalMessage,    Loc, TEXT("sample.button.signPersonalMessage"));
+		ApplyButtonLabel(Btn_SignTypedData,          Loc, TEXT("sample.button.signTypedData"));
+		ApplyButtonLabel(Btn_CheckTokenExpiry,       Loc, TEXT("sample.button.checkTokenExpiry"));
+		ApplyButtonLabel(Btn_RefreshToken,           Loc, TEXT("sample.button.refreshToken"));
+		ApplyButtonLabel(Btn_GetUserInfo,            Loc, TEXT("sample.button.getUserInfo"));
+		ApplyButtonLabel(Btn_SignOut,                Loc, TEXT("sample.button.signOut"));
+		ApplyButtonLabel(Btn_EditorSimulateDeepLink, Loc, TEXT("sample.button.editorSimulateDeepLink"));
+		// Btn_ToggleLanguage label is handled by HandleLanguageChanged
+		// (always shows the *current* language code, not a translated word).
+
+		// Hand off to BP — designers can override OnRefreshLocalizedLabels to
+		// localize bespoke widgets the C++ base can't see.
+		OnRefreshLocalizedLabels(Loc->GetLanguage());
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -935,6 +1144,59 @@ void UDappTestPanelBase::SetStatusArgs(FName Key, const TMap<FString, FString>& 
 void UDappTestPanelBase::SetStatusText(const FText& Text)
 {
 	WriteLabel(Txt_Status, Text);
+}
+
+FString UDappTestPanelBase::ResolveDappName() const
+{
+	if (const ADappActor* Actor = ResolveActor())
+	{
+		if (!Actor->AppName.IsEmpty())
+		{
+			return Actor->AppName;
+		}
+	}
+	return TEXT("CROSSx Unreal Sample");
+}
+
+FString UDappTestPanelBase::ResolveCachedSub() const
+{
+	if (UCROSSxSdkSubsystem* Sdk = ResolveSdk())
+	{
+		const FCROSSxWalletInfo Info = Sdk->GetCachedWalletInfo();
+		return Info.Sub.IsEmpty() ? Info.UserId : Info.Sub;
+	}
+	return FString();
+}
+
+void UDappTestPanelBase::EnsureWalletSetup(EPendingWalletAction NextAction)
+{
+	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
+	if (!Sdk) { return; }
+
+	// Stash the in-flight intent so HandleCreateWalletResult can retry it
+	// once the user finishes the SDK-side migration / create-wallet modal.
+	PendingWalletAction = NextAction;
+
+	SetStatus(TEXT("sample.status.creatingWallet"));
+	FCROSSxCreateWalletDelegate Del;
+	Del.BindDynamic(this, &UDappTestPanelBase::HandleCreateWalletResult);
+	Sdk->SetupWalletWithUIAsync(ResolveCachedSub(), Del);
+}
+
+void UDappTestPanelBase::RetryPendingWalletAction()
+{
+	const EPendingWalletAction Action = PendingWalletAction;
+	PendingWalletAction = EPendingWalletAction::None;
+	switch (Action)
+	{
+		case EPendingWalletAction::SignPersonalMessage: OnClickSignPersonalMessage(); break;
+		case EPendingWalletAction::SignTypedData:       OnClickSignTypedData();       break;
+		case EPendingWalletAction::SignTx:              OnClickSignTx();              break;
+		case EPendingWalletAction::SendTx:              OnClickSendTx();              break;
+		case EPendingWalletAction::GetTokenBalance:     OnClickGetTokenBalance();     break;
+		case EPendingWalletAction::SendToken:           OnClickSendToken();           break;
+		default: break;
+	}
 }
 
 FString UDappTestPanelBase::ResolveFromAddress() const

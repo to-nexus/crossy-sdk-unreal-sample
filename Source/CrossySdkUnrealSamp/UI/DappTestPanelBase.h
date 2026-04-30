@@ -37,6 +37,23 @@ class UCROSSxRampSdkSubsystem;
  * (which displays the SDK's built-in modal flow) or a lower-level *Async
  * method whose result we surface through the notification bus + status text.
  */
+// Tracks which user-initiated action (if any) is waiting on the SDK's
+// SetupWalletWithUIAsync flow to finish. The dev-panel demo
+// (CROSSxSdkTestPanelWidget::EnsureFromAddressThen) uses a lambda chain for
+// this; UFUNCTION-bound delegates can't capture lambdas, so we encode the
+// pending action as a plain enum and retry it in HandleCreateWalletResult.
+UENUM()
+enum class EPendingWalletAction : uint8
+{
+	None,
+	SignPersonalMessage,
+	SignTypedData,
+	SignTx,
+	SendTx,
+	GetTokenBalance,
+	SendToken,
+};
+
 UCLASS(Abstract, Blueprintable, BlueprintType, meta = (DisplayName = "Dapp Test Panel"))
 class CROSSYSDKUNREALSAMP_API UDappTestPanelBase : public UUserWidget
 {
@@ -122,6 +139,12 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "Dapp|Panel")
 	void RefreshLocalizedLabels();
 
+	// Fired right after RefreshLocalizedLabels finishes its default (C++) pass.
+	// BP subclasses can override this to push localized text into bespoke
+	// widgets that the C++ base class can't see (e.g. tooltips, header bars).
+	UFUNCTION(BlueprintImplementableEvent, Category = "Dapp|Panel")
+	void OnRefreshLocalizedLabels(EDappLang NewLang);
+
 	UFUNCTION(BlueprintImplementableEvent, Category = "Dapp|Panel")
 	void OnLoginStateChanged(bool bLoggedIn);
 
@@ -191,6 +214,20 @@ private:
 	FString  ResolveFromAddress() const;
 	FString  ResolveChainId() const;
 	int32    ResolveTokenDecimals() const;
+	FString  ResolveDappName() const;
+	// Mirrors CROSSxSdkTestPanelWidget's pattern of pulling the cached `Sub`
+	// from FCROSSxWalletInfo (falling back to UserId). Passing an empty Sub
+	// to SetupWalletWithUIAsync makes the SDK pick whichever value happens
+	// to be in the auth cache at *that* moment, which can race the
+	// migration flow and store the password under a different identity than
+	// the one used at sign-time → the user sees "invalid password" with a
+	// correct PIN. Resolving the Sub up-front avoids that race.
+	FString  ResolveCachedSub() const;
+	// Wallet-setup retry plumbing. EnsureWalletSetup() kicks
+	// SetupWalletWithUIAsync (PIN modal). HandleCreateWalletResult() then
+	// re-fires the action stashed in PendingWalletAction.
+	void     EnsureWalletSetup(EPendingWalletAction NextAction);
+	void     RetryPendingWalletAction();
 	void     Notify(FName Key);
 	void     NotifyArgs(FName Key, const TMap<FString, FString>& Args);
 	void     NotifyError(FName Key, const TMap<FString, FString>& Args);
@@ -203,4 +240,9 @@ private:
 	UPROPERTY(Transient) int32   PendingTokenBalanceDecimals = 18;
 
 	UPROPERTY(Transient) bool    bLastKnownLoggedIn = false;
+
+	// What to do once SetupWalletWithUIAsync resolves. Defaults to None,
+	// meaning HandleCreateWalletResult just closes the loop and reports
+	// success/failure. See OnClickSignPersonalMessage etc. for callers.
+	UPROPERTY(Transient) EPendingWalletAction PendingWalletAction = EPendingWalletAction::None;
 };
