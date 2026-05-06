@@ -6,7 +6,11 @@
 #include "Components/EditableTextBox.h"
 #include "Components/MultiLineEditableTextBox.h"
 #include "Components/PanelWidget.h"
+#include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
 #include "Kismet/KismetSystemLibrary.h"
 
@@ -27,6 +31,19 @@ DEFINE_LOG_CATEGORY_STATIC(LogDappPanel, Log, All);
 void UDappTestPanelBase::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	// Mobile ScrollBox fix (UE-42440 official Epic comment): SScrollBox only
+	// steals capture from a child Button after the user has dragged past
+	// FSlateApplication::DragTriggerDistance (default 5px). On high-DPI
+	// Android screens 5px is below the typical finger jitter, so the Button
+	// permanently keeps capture and the ScrollBox never starts scrolling
+	// when the touch begins on top of any interactive widget. Lowering the
+	// threshold to ~2px lets the ScrollBox win the capture race almost
+	// immediately while still allowing taps to register as taps.
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().SetDragTriggerDistance(2.0f);
+	}
 
 	BindAllClickHandlers();
 
@@ -59,6 +76,109 @@ void UDappTestPanelBase::NativeConstruct()
 		RefreshLocalizedLabels();
 	}
 	ApplyLoginState(bLastKnownLoggedIn);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Mobile ScrollBox drag fallback
+// ─────────────────────────────────────────────────────────────────────
+//
+// Why this exists:
+//   On Android, when a touch starts on top of a UButton or UEditableTextBox
+//   inside a UScrollBox, the child captures the pointer and the ScrollBox
+//   never gets a chance to "steal" capture. NativeOnPreviewMouseButtonDown
+//   would fire on the root before children, but on the mobile path it does
+//   not run early enough (or at all on some devices), so the cleanest
+//   solution is to bypass the event system entirely and just poll the global
+//   cursor position every frame. With bUseMouseForTouch=True the touch is
+//   already mirrored into FSlateApplication's cursor state, so polling
+//   captures every drag — regardless of which widget owns capture.
+//
+// Trade-offs:
+//   - A long press that drifts even slightly will both click the button AND
+//     scroll the panel by the drift. Acceptable for a developer test sample
+//     (matches Unity sample behaviour).
+//   - bUseMouseForTouch=True is required (set in DefaultInput.ini).
+//   - Multi-touch is not supported.
+
+FReply UDappTestPanelBase::NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	// Best-effort: if the preview event reaches us before any child captures,
+	// we get a head start on the polling loop with the exact down position.
+	if (Scroll_Root && InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		bMobileDragActive    = true;
+		MobileDragLastScreen = InMouseEvent.GetScreenSpacePosition();
+	}
+	return Super::NativeOnPreviewMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+FReply UDappTestPanelBase::NativeOnTouchStarted(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent)
+{
+	if (Scroll_Root && MobileDragPointerIdx == INDEX_NONE)
+	{
+		bMobileDragActive    = true;
+		MobileDragLastScreen = InGestureEvent.GetScreenSpacePosition();
+		MobileDragPointerIdx = InGestureEvent.GetPointerIndex();
+	}
+	return Super::NativeOnTouchStarted(InGeometry, InGestureEvent);
+}
+
+FReply UDappTestPanelBase::NativeOnTouchMoved(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent)
+{
+	if (Scroll_Root && bMobileDragActive && InGestureEvent.GetPointerIndex() == MobileDragPointerIdx)
+	{
+		const FVector2D Current = InGestureEvent.GetScreenSpacePosition();
+		const FVector2D Delta   = Current - MobileDragLastScreen;
+		MobileDragLastScreen    = Current;
+		Scroll_Root->SetScrollOffset(Scroll_Root->GetScrollOffset() - Delta.Y);
+	}
+	return Super::NativeOnTouchMoved(InGeometry, InGestureEvent);
+}
+
+FReply UDappTestPanelBase::NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent)
+{
+	if (InGestureEvent.GetPointerIndex() == MobileDragPointerIdx)
+	{
+		bMobileDragActive    = false;
+		MobileDragPointerIdx = INDEX_NONE;
+	}
+	return Super::NativeOnTouchEnded(InGeometry, InGestureEvent);
+}
+
+void UDappTestPanelBase::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+
+	if (!Scroll_Root || !FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	FSlateApplication& Slate = FSlateApplication::Get();
+	const bool bMouseDown = Slate.GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
+
+	if (bMouseDown)
+	{
+		const FVector2D CursorPos = Slate.GetCursorPos();
+		if (!bMobileDragActive)
+		{
+			bMobileDragActive    = true;
+			MobileDragLastScreen = CursorPos;
+		}
+		else
+		{
+			const FVector2D Delta = CursorPos - MobileDragLastScreen;
+			MobileDragLastScreen  = CursorPos;
+			if (!Delta.IsNearlyZero())
+			{
+				Scroll_Root->SetScrollOffset(Scroll_Root->GetScrollOffset() - Delta.Y);
+			}
+		}
+	}
+	else if (bMobileDragActive && MobileDragPointerIdx == INDEX_NONE)
+	{
+		bMobileDragActive = false;
+	}
 }
 
 void UDappTestPanelBase::NativeDestruct()
@@ -274,9 +394,10 @@ void UDappTestPanelBase::HandleCreateWalletResult(const FCROSSxCreateWalletResul
 	WriteLabel(Txt_WalletAddress, FText::FromString(Result.Address));
 	WriteText(Inp_From,           Result.Address);
 	{
-		const TMap<FString, FString> Args = { { TEXT("address"), ShortenAddress(Result.Address) } };
-		NotifyArgs(TEXT("sample.wallet.createSuccess"), Args);
-		SetStatusArgs(TEXT("sample.wallet.createSuccess"), Args);
+		const TMap<FString, FString> ToastArgs  = { { TEXT("address"), ShortenAddress(Result.Address) } };
+		const TMap<FString, FString> StatusArgs = { { TEXT("address"), Result.Address } };
+		NotifyArgs(TEXT("sample.wallet.createSuccess"), ToastArgs);
+		SetStatusArgs(TEXT("sample.wallet.createSuccess"), StatusArgs);
 	}
 
 	// Replay whatever button kicked off the auto-setup so the user
@@ -311,9 +432,10 @@ void UDappTestPanelBase::HandleGetAddressResult(const FCROSSxGetAddressResponse&
 	WriteLabel(Txt_WalletAddress, FText::FromString(Result.Address));
 	WriteText(Inp_From,           Result.Address);
 	{
-		const TMap<FString, FString> Args = { { TEXT("address"), ShortenAddress(Result.Address) } };
-		NotifyArgs(TEXT("sample.address.fetched"), Args);
-		SetStatusArgs(TEXT("sample.address.fetched"), Args);
+		const TMap<FString, FString> ToastArgs  = { { TEXT("address"), ShortenAddress(Result.Address) } };
+		const TMap<FString, FString> StatusArgs = { { TEXT("address"), Result.Address } };
+		NotifyArgs(TEXT("sample.address.fetched"), ToastArgs);
+		SetStatusArgs(TEXT("sample.address.fetched"), StatusArgs);
 	}
 }
 
@@ -679,9 +801,13 @@ void UDappTestPanelBase::HandleSignMessageResult(const FCROSSxSignMessageRespons
 	}
 	UE_LOG(LogDappPanel, Log, TEXT("Personal signature: %s"), *Result.Signature);
 	{
-		const TMap<FString, FString> Args = { { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } };
-		NotifyArgs(TEXT("sample.message.signOk"), Args);
-		SetStatusArgs(TEXT("sample.message.signOk"), Args);
+		// Show the full signature in the status banner so QA can copy/verify it
+		// against the wallet output. Truncation belongs in the toast (NotifyArgs)
+		// where vertical space is limited, not in the on-screen status row.
+		const TMap<FString, FString> ToastArgs  = { { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } };
+		const TMap<FString, FString> StatusArgs = { { TEXT("sig"), Result.Signature } };
+		NotifyArgs(TEXT("sample.message.signOk"), ToastArgs);
+		SetStatusArgs(TEXT("sample.message.signOk"), StatusArgs);
 	}
 }
 
@@ -723,9 +849,10 @@ void UDappTestPanelBase::HandleSignTypedDataResult(const FCROSSxSignTypedDataRes
 	}
 	UE_LOG(LogDappPanel, Log, TEXT("Typed-data signature: %s"), *Result.Signature);
 	{
-		const TMap<FString, FString> Args = { { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } };
-		NotifyArgs(TEXT("sample.message.typedOk"), Args);
-		SetStatusArgs(TEXT("sample.message.typedOk"), Args);
+		const TMap<FString, FString> ToastArgs  = { { TEXT("sig"), Result.Signature.Len() > 16 ? Result.Signature.Left(16) + TEXT("…") : Result.Signature } };
+		const TMap<FString, FString> StatusArgs = { { TEXT("sig"), Result.Signature } };
+		NotifyArgs(TEXT("sample.message.typedOk"), ToastArgs);
+		SetStatusArgs(TEXT("sample.message.typedOk"), StatusArgs);
 	}
 }
 

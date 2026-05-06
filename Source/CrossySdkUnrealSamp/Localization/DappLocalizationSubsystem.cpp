@@ -2,6 +2,7 @@
 
 #include "Engine/DataTable.h"
 #include "Engine/GameInstance.h"
+#include "Engine/World.h"
 #include "HAL/PlatformFileManager.h"
 #include "Internationalization/Culture.h"
 #include "Internationalization/Internationalization.h"

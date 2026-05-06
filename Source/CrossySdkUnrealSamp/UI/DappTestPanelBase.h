@@ -12,6 +12,7 @@ class UTextBlock;
 class UEditableTextBox;
 class UMultiLineEditableTextBox;
 class UPanelWidget;
+class UScrollBox;
 
 class ADappActor;
 class UDappLocalizationSubsystem;
@@ -62,6 +63,16 @@ class CROSSYSDKUNREALSAMP_API UDappTestPanelBase : public UUserWidget
 public:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	// Mobile ScrollBox + Button capture race workaround. When the user
+	// presses on top of any interactive child of Scroll_Root we record the
+	// touch start; NativeTick then nudges the ScrollBox by the per-frame
+	// delta so dragging works even though the Button keeps mouse capture.
+	// See implementation comment for the long story.
+	virtual FReply NativeOnPreviewMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnTouchStarted(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent) override;
+	virtual FReply NativeOnTouchMoved(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent) override;
+	virtual FReply NativeOnTouchEnded(const FGeometry& InGeometry, const FPointerEvent& InGestureEvent) override;
 
 	// ═══════════════ Exposed defaults (editable on the WBP) ═══════════════
 
@@ -77,8 +88,38 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
 	FString DefaultTokenDecimals = TEXT("18");
 
+	// Minimal EIP-712 typed-data payload that's safe to sign on any EVM
+	// chain (no on-chain effect; pure off-chain signature for testing).
+	// Without a default, OnClickSignTypedData() short-circuits with
+	// `sample.message.invalidTypedData` whenever the user hasn't typed
+	// anything into Inp_SignTypedData — which feels like "the button does
+	// nothing" because the toast is easy to miss.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults", meta = (MultiLine = true))
-	FString DefaultTypedDataJson;
+	FString DefaultTypedDataJson = TEXT(R"({
+  "types": {
+    "EIP712Domain": [
+      { "name": "name",    "type": "string"  },
+      { "name": "version", "type": "string"  },
+      { "name": "chainId", "type": "uint256" }
+    ],
+    "Mail": [
+      { "name": "from",    "type": "string" },
+      { "name": "to",      "type": "string" },
+      { "name": "contents","type": "string" }
+    ]
+  },
+  "primaryType": "Mail",
+  "domain": {
+    "name": "CROSSx Unreal Sample",
+    "version": "1",
+    "chainId": 612044
+  },
+  "message": {
+    "from": "Alice",
+    "to": "Bob",
+    "contents": "Hello from CROSSx Unreal Sample"
+  }
+})");
 
 protected:
 	// ═══════════════ Bound widgets (all optional) ═══════════════
@@ -131,6 +172,10 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* Panel_Wallet;
 	UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* Panel_Features;
 	UPROPERTY(meta = (BindWidgetOptional)) UPanelWidget* Panel_EditorTools;
+
+	// Optional bind: name the root ScrollBox `Scroll_Root` in the WBP to opt
+	// into the mobile drag-fallback. When unset the fallback is a no-op.
+	UPROPERTY(meta = (BindWidgetOptional)) UScrollBox* Scroll_Root;
 
 	// ═══════════════ Blueprint-callable hooks ═══════════════
 	// These are exposed so that a BP subclass can override behavior (e.g.
@@ -245,4 +290,10 @@ private:
 	// meaning HandleCreateWalletResult just closes the loop and reports
 	// success/failure. See OnClickSignPersonalMessage etc. for callers.
 	UPROPERTY(Transient) EPendingWalletAction PendingWalletAction = EPendingWalletAction::None;
+
+	// Mobile drag-fallback bookkeeping (see NativeOnPreviewMouseButtonDown
+	// / NativeOnTouch* implementations).
+	bool       bMobileDragActive    = false;
+	FVector2D  MobileDragLastScreen = FVector2D::ZeroVector;
+	int32      MobileDragPointerIdx = INDEX_NONE;
 };
