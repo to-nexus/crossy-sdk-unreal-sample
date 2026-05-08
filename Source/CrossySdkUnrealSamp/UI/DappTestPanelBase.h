@@ -61,6 +61,8 @@ class CROSSYSDKUNREALSAMP_API UDappTestPanelBase : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UDappTestPanelBase(const FObjectInitializer& ObjectInitializer);
+
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -95,31 +97,7 @@ public:
 	// anything into Inp_SignTypedData — which feels like "the button does
 	// nothing" because the toast is easy to miss.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults", meta = (MultiLine = true))
-	FString DefaultTypedDataJson = TEXT(R"({
-  "types": {
-    "EIP712Domain": [
-      { "name": "name",    "type": "string"  },
-      { "name": "version", "type": "string"  },
-      { "name": "chainId", "type": "uint256" }
-    ],
-    "Mail": [
-      { "name": "from",    "type": "string" },
-      { "name": "to",      "type": "string" },
-      { "name": "contents","type": "string" }
-    ]
-  },
-  "primaryType": "Mail",
-  "domain": {
-    "name": "CROSSx Unreal Sample",
-    "version": "1",
-    "chainId": 612044
-  },
-  "message": {
-    "from": "Alice",
-    "to": "Bob",
-    "contents": "Hello from CROSSx Unreal Sample"
-  }
-})");
+	FString DefaultTypedDataJson;
 
 protected:
 	// ═══════════════ Bound widgets (all optional) ═══════════════

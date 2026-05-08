@@ -53,10 +53,17 @@ fi
 # GITHUB_TOKEN is optional: GitHub Releases on a public repo can be read
 # anonymously. We attach Authorization only when a token is present, mainly
 # to bypass the 60/hr anonymous rate limit on shared CI runners.
-AUTH_HEADER_ARG=()
-if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    AUTH_HEADER_ARG=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-fi
+#
+# Keep this as a wrapper instead of an optional bash array: macOS still ships
+# bash 3.2, where expanding an empty array under `set -u` can fail with
+# "unbound variable".
+github_curl() {
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        curl -H "Authorization: Bearer ${GITHUB_TOKEN}" "$@"
+    else
+        curl "$@"
+    fi
+}
 
 OWNER=$(jq -r '.registry.owner' "$MANIFEST")
 REPO=$( jq -r '.registry.repo'  "$MANIFEST")
@@ -126,8 +133,7 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
     asset=$(plugin_asset "$name" "$version")
 
     # 1) Resolve asset URL via Releases API
-    release_json=$(curl -fsSL \
-        "${AUTH_HEADER_ARG[@]}" \
+    release_json=$(github_curl -fsSL \
         -H "Accept: application/vnd.github+json" \
         "${API}/releases/tags/${tag}") || {
         echo "[err] $name: tag '$tag' not found on ${OWNER}/${REPO}" >&2
@@ -155,8 +161,7 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
     # 3) Download
     tmpzip="$(mktemp -t crossx-plugin-XXXXXX).zip"
     echo "[get]  $name@$version  <-  ${OWNER}/${REPO}  ($asset)"
-    curl -fSL --progress-bar \
-        "${AUTH_HEADER_ARG[@]}" \
+    github_curl -fSL --progress-bar \
         -H "Accept: application/octet-stream" \
         "$asset_url" -o "$tmpzip"
 

@@ -28,6 +28,36 @@ DEFINE_LOG_CATEGORY_STATIC(LogDappPanel, Log, All);
 // Lifecycle
 // ─────────────────────────────────────────────────────────────────────
 
+UDappTestPanelBase::UDappTestPanelBase(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	DefaultTypedDataJson = TEXT(R"({
+  "types": {
+    "EIP712Domain": [
+      { "name": "name",    "type": "string"  },
+      { "name": "version", "type": "string"  },
+      { "name": "chainId", "type": "uint256" }
+    ],
+    "Mail": [
+      { "name": "from",    "type": "string" },
+      { "name": "to",      "type": "string" },
+      { "name": "contents","type": "string" }
+    ]
+  },
+  "primaryType": "Mail",
+  "domain": {
+    "name": "CROSSx Unreal Sample",
+    "version": "1",
+    "chainId": 612044
+  },
+  "message": {
+    "from": "Alice",
+    "to": "Bob",
+    "contents": "Hello from CROSSx Unreal Sample"
+  }
+})");
+}
+
 void UDappTestPanelBase::NativeConstruct()
 {
 	Super::NativeConstruct();
