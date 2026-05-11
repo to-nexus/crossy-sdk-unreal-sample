@@ -13,7 +13,7 @@ class UUserWidget;
  * Drop this class onto any map (or set it as `GlobalDefaultGameMode`) and the
  * sample comes alive without further setup:
  *   1) Spawns an ADappActor (unless one is already in the level), which in
- *      turn configures + initializes the CROSSx SDK and Ramp subsystems.
+ *      turn configures + initializes the CROSSx SDK and Webkit subsystems.
  *   2) Creates the WBP_DappTestPanel widget and adds it to the local
  *      player's viewport, with input mode = Game and UI + cursor visible.
  *

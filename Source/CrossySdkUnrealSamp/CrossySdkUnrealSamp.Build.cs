@@ -21,11 +21,11 @@ public class CrossySdkUnrealSamp : ModuleRules
 			"Json",
 			"JsonUtilities",
 			"CROSSxSdkUnrealPlugin",
-			"CROSSxRampSdkUnrealPlugin"
+			"CROSSxWebkitSdkUnrealPlugin"
 		});
 
 		// HTTP brings in FGenericPlatformHttp::UrlEncode, used by
-		// OnClickUseRamp() to build the demo Ramp URL when the user leaves
+		// OnClickUseWebkit() to build the demo Webkit URL when the user leaves
 		// the URL field blank. Header is in Engine/Source/Runtime/Online/HTTP/
 		// Public/GenericPlatform/GenericPlatformHttp.h, but the symbol body
 		// only ships in the HTTP module, hence this dep.

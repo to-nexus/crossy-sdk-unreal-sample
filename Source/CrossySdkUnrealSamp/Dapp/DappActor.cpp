@@ -7,8 +7,8 @@
 
 #include "SDK/CROSSxSdkSubsystem.h"
 #include "Core/Types/CROSSxSdkSettings.h"
-#include "CROSSxRampSdkSubsystem.h"
-#include "CROSSxRampTypes.h"
+#include "CROSSxWebkitSdkSubsystem.h"
+#include "CROSSxWebkitTypes.h"
 
 #include "Localization/DappLocalizationSubsystem.h"
 #include "UI/DappNotificationSubsystem.h"
@@ -34,7 +34,7 @@ ADappActor* ADappActor::Find(const UObject* WorldContext)
 }
 
 UCROSSxSdkSubsystem* ADappActor::GetSdk() const           { return ResolveSdk(); }
-UCROSSxRampSdkSubsystem* ADappActor::GetRampSdk() const   { return ResolveRampSdk(); }
+UCROSSxWebkitSdkSubsystem* ADappActor::GetWebkitSdk() const   { return ResolveWebkitSdk(); }
 
 bool ADappActor::IsSdkInitialized() const
 {
@@ -66,7 +66,7 @@ void ADappActor::BeginPlay()
 	Super::BeginPlay();
 
 	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
-	UCROSSxRampSdkSubsystem* Ramp = ResolveRampSdk();
+	UCROSSxWebkitSdkSubsystem* Webkit = ResolveWebkitSdk();
 
 	if (!Sdk)
 	{
@@ -118,14 +118,14 @@ void ADappActor::BeginPlay()
 	InitDelegate.BindDynamic(this, &ADappActor::HandleSdkInitialized);
 	Sdk->InitializeSdkAsync(InitDelegate);
 
-	// Ramp is a simple companion SDK — InitRamp just stages browser adapter +
-	// freezes the ProjectId. Opening the ramp page is a dApp-call later.
-	if (Ramp)
+	// Webkit is a simple companion SDK — InitWebkit just stages browser adapter +
+	// freezes the ProjectId. Opening the webkit page is a dApp-call later.
+	if (Webkit)
 	{
-		FCROSSxRampConfig RampCfg;
-		RampCfg.ProjectId = Config.ProjectId;
-		RampCfg.bDebug    = bEnableDebugLogs;
-		Ramp->InitRamp(RampCfg);
+		FCROSSxWebkitConfig WebkitCfg;
+		WebkitCfg.ProjectId = Config.ProjectId;
+		WebkitCfg.bDebug    = bEnableDebugLogs;
+		Webkit->InitWebkit(WebkitCfg);
 	}
 }
 
@@ -275,13 +275,13 @@ UCROSSxSdkSubsystem* ADappActor::ResolveSdk() const
 	return nullptr;
 }
 
-UCROSSxRampSdkSubsystem* ADappActor::ResolveRampSdk() const
+UCROSSxWebkitSdkSubsystem* ADappActor::ResolveWebkitSdk() const
 {
 	if (const UWorld* World = GetWorld())
 	{
 		if (UGameInstance* GI = World->GetGameInstance())
 		{
-			return GI->GetSubsystem<UCROSSxRampSdkSubsystem>();
+			return GI->GetSubsystem<UCROSSxWebkitSdkSubsystem>();
 		}
 	}
 	return nullptr;

@@ -41,7 +41,7 @@ xcuserdata/
 # Installed SDK plugins (fetched via scripts/install-plugins.sh).
 # The lockfile IS committed so teammates reproduce the same versions.
 /Plugins/CROSSxSdkUnrealPlugin/
-/Plugins/CROSSxRampSdkUnrealPlugin/
+/Plugins/CROSSxWebkitSdkUnrealPlugin/
 
 # Local env (PAT etc.)
 .env

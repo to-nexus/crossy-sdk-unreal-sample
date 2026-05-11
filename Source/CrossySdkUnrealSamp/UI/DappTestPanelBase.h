@@ -18,7 +18,7 @@ class ADappActor;
 class UDappLocalizationSubsystem;
 class UDappNotificationSubsystem;
 class UCROSSxSdkSubsystem;
-class UCROSSxRampSdkSubsystem;
+class UCROSSxWebkitSdkSubsystem;
 
 /**
  * UDappTestPanelBase — C++ base class for the sample test panel widget.
@@ -106,7 +106,8 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_Login;
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_LoginGoogle;
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_LoginApple;
-	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_UseRamp;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_UseWebkit;
+	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_UseCrossPay;
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_CreateWallet;
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_GetAddress;
 	UPROPERTY(meta = (BindWidgetOptional)) UButton* Btn_GetAllAddresses;
@@ -137,7 +138,7 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_TokenDecimals;
 	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_SignMessage;
 	UPROPERTY(meta = (BindWidgetOptional)) UMultiLineEditableTextBox* Inp_SignTypedData;
-	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_RampUrl;
+	UPROPERTY(meta = (BindWidgetOptional)) UEditableTextBox* Inp_WebkitUrl;
 
 	// ── Display ─────────────────────────────────────────────
 	UPROPERTY(meta = (BindWidgetOptional)) UTextBlock* Txt_WalletAddress;
@@ -175,7 +176,8 @@ protected:
 	UFUNCTION() void OnClickLogin();
 	UFUNCTION() void OnClickLoginGoogle();
 	UFUNCTION() void OnClickLoginApple();
-	UFUNCTION() void OnClickUseRamp();
+	UFUNCTION() void OnClickUseWebkit();
+	UFUNCTION() void OnClickUseCrossPay();
 	UFUNCTION() void OnClickCreateWallet();
 	UFUNCTION() void OnClickGetAddress();
 	UFUNCTION() void OnClickGetAllAddresses();
@@ -220,7 +222,7 @@ private:
 	// ── Resolvers ──────────────────────────────────────────
 	ADappActor*                 ResolveActor() const;
 	UCROSSxSdkSubsystem*        ResolveSdk() const;
-	UCROSSxRampSdkSubsystem*    ResolveRampSdk() const;
+	UCROSSxWebkitSdkSubsystem*    ResolveWebkitSdk() const;
 	UDappLocalizationSubsystem* ResolveLoc() const;
 	UDappNotificationSubsystem* ResolveNotif() const;
 

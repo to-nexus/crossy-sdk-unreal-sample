@@ -22,7 +22,7 @@ Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, �
 
 > > > > > > > 6c6a2bd3551585cefadc48c4166e35df685e3ed1
 
-`Plugins/CROSSxSdkUnrealPlugin/` 와 `Plugins/CROSSxRampSdkUnrealPlugin/` 는
+`Plugins/CROSSxSdkUnrealPlugin/` 와 `Plugins/CROSSxWebkitSdkUnrealPlugin/` 는
 `.gitignore` 로 제외되며, `make sdk-install` 가 매번 같은 버전으로 재생성합니다.
 
 ---
@@ -108,7 +108,7 @@ pwsh ./scripts/install-plugins.ps1
 
 ```bash
 make sdk-update name=CROSSxSdkUnrealPlugin     version=0.3.0
-make sdk-update name=CROSSxRampSdkUnrealPlugin version=0.3.0
+make sdk-update name=CROSSxWebkitSdkUnrealPlugin version=0.3.0
 ```
 
 ### 3.2 수동 편집 후 동기화
@@ -117,7 +117,7 @@ make sdk-update name=CROSSxRampSdkUnrealPlugin version=0.3.0
  "plugins": {
 -  "CROSSxSdkUnrealPlugin":     "0.0.0-beta.1",
 +  "CROSSxSdkUnrealPlugin":     "0.3.0",
-   "CROSSxRampSdkUnrealPlugin": "0.0.0-beta.1"
+   "CROSSxWebkitSdkUnrealPlugin": "0.0.0-beta.1"
  }
 ```
 
@@ -199,7 +199,7 @@ make sdk-clean && make sdk-install
    - StartupMap 생성 + `Project Settings → Maps & Modes` 에 등록
      (`ADappActor` 와 패널은 `ADappGameMode` 가 자동으로 스폰합니다 —
      수동 배치 불필요)
-4. 에디터 PIE 로 Login → Create Wallet → Sign/Send Tx → Ramp 순서 스모크 테스트.
+4. 에디터 PIE 로 Login → Create Wallet → Sign/Send Tx → Webkit 순서 스모크 테스트.
 5. 실기기 빌드/배포 — `make ios` / `make android` / `make install-android` /
    `make run-android` 등. 상세 절차 + 자주 만나는 이슈는
    **`Documentation/BUILD_GUIDE.md`**.

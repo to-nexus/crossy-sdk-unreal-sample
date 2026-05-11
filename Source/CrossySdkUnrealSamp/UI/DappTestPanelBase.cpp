@@ -12,6 +12,13 @@
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
+#include "Dom/JsonObject.h"
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
+#include "Misc/Guid.h"
+#include "Policies/CondensedJsonPrintPolicy.h"
+#include "Serialization/JsonSerializer.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 #include "Dapp/DappActor.h"
@@ -20,9 +27,60 @@
 #include "Localization/DappLocalizationSubsystem.h"
 
 #include "SDK/CROSSxSdkSubsystem.h"
-#include "CROSSxRampSdkSubsystem.h"
+#include "CROSSxWebkitSdkSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogDappPanel, Log, All);
+
+namespace
+{
+	const FString CrossPayPaymentsUrl = TEXT("https://stg-api.crosspay.ai/v1/payments");
+	const FString CrossPayMerchantApiKey = TEXT("test-api-key-crosshub-001");
+
+	FString BuildCrossPayPaymentRequestJson()
+	{
+		TSharedRef<FJsonObject> Product = MakeShared<FJsonObject>();
+		Product->SetStringField(TEXT("name"), TEXT("Legendary Axe"));
+		Product->SetStringField(TEXT("detail"), TEXT("Epic weapon skin for warrior class"));
+		Product->SetStringField(TEXT("image"), TEXT("https://dev-static.crossnft.io/assets/games/7e33c5becdc9aea95c09e9374e382e12fd7abb7c.png"));
+		Product->SetNumberField(TEXT("quantity"), 1);
+		Product->SetStringField(TEXT("category"), TEXT("IN_GAME_ITEM"));
+		Product->SetStringField(TEXT("vendor"), TEXT("Seal M on CROSS"));
+
+		TSharedRef<FJsonObject> Metadata = MakeShared<FJsonObject>();
+		Metadata->SetObjectField(TEXT("product"), Product);
+		Metadata->SetStringField(TEXT("order_id"), FString::Printf(TEXT("demo-order-%s"), *FGuid::NewGuid().ToString(EGuidFormats::Digits)));
+
+		TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("currency"), TEXT("USD"));
+		Root->SetStringField(TEXT("amount"), TEXT("4.99"));
+		Root->SetStringField(TEXT("payer_uid"), TEXT("test-user"));
+		Root->SetObjectField(TEXT("metadata"), Metadata);
+
+		FString Out;
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+		FJsonSerializer::Serialize(Root, Writer);
+		return Out;
+	}
+
+	bool TryExtractCrossPayCheckoutUrl(const FString& ResponseBody, FString& OutCheckoutUrl, FString& OutError)
+	{
+		TSharedPtr<FJsonObject> Root;
+		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseBody);
+		if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+		{
+			OutError = TEXT("CROSS Pay response is not valid JSON.");
+			return false;
+		}
+
+		if (!Root->TryGetStringField(TEXT("checkout_url"), OutCheckoutUrl) || OutCheckoutUrl.IsEmpty())
+		{
+			OutError = TEXT("CROSS Pay checkout_url is missing in the payment response.");
+			return false;
+		}
+
+		return true;
+	}
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // Lifecycle
@@ -233,7 +291,8 @@ void UDappTestPanelBase::BindAllClickHandlers()
 	BIND_CLICK(Btn_Login,                  OnClickLogin);
 	BIND_CLICK(Btn_LoginGoogle,            OnClickLoginGoogle);
 	BIND_CLICK(Btn_LoginApple,             OnClickLoginApple);
-	BIND_CLICK(Btn_UseRamp,                OnClickUseRamp);
+	BIND_CLICK(Btn_UseWebkit,                OnClickUseWebkit);
+	BIND_CLICK(Btn_UseCrossPay,              OnClickUseCrossPay);
 	BIND_CLICK(Btn_CreateWallet,           OnClickCreateWallet);
 	BIND_CLICK(Btn_GetAddress,             OnClickGetAddress);
 	BIND_CLICK(Btn_GetAllAddresses,        OnClickGetAllAddresses);
@@ -956,24 +1015,24 @@ void UDappTestPanelBase::HandleGetUserInfoResult(const FCROSSxSdkUserInfo& Info)
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Ramp section
+// Webkit section
 // ─────────────────────────────────────────────────────────────────────
 
-void UDappTestPanelBase::OnClickUseRamp()
+void UDappTestPanelBase::OnClickUseWebkit()
 {
-	UCROSSxRampSdkSubsystem* Ramp = ResolveRampSdk();
-	if (!Ramp || !Ramp->IsInitialized())
+	UCROSSxWebkitSdkSubsystem* Webkit = ResolveWebkitSdk();
+	if (!Webkit || !Webkit->IsInitialized())
 	{
-		NotifyError(TEXT("sample.ramp.notReady"), {});
+		NotifyError(TEXT("sample.webkit.notReady"), {});
 		return;
 	}
 
-	// Mirrors CROSSxSdkTestPanelWidget::BuildSampleRampUrl — when the user
-	// leaves the URL input blank, fall back to the SDK demo's stage ramp
+	// Mirrors CROSSxSdkTestPanelWidget::BuildSampleWebkitUrl — when the user
+	// leaves the URL input blank, fall back to the SDK demo's stage webkit
 	// URL with placeholders the SDK substitutes (dappSessionId,
 	// dappAccessToken). External teams overriding for production should
-	// set Inp_RampUrl in the WBP defaults or hard-code their own here.
-	FString Url = ReadText(Inp_RampUrl).TrimStartAndEnd();
+	// set Inp_WebkitUrl in the WBP defaults or hard-code their own here.
+	FString Url = ReadText(Inp_WebkitUrl).TrimStartAndEnd();
 	if (Url.IsEmpty())
 	{
 		const FString BaseUrl     = TEXT("https://stg-ramp.crosstoken.io/exchange");
@@ -985,25 +1044,109 @@ void UDappTestPanelBase::OnClickUseRamp()
 			*BaseUrl, *Uuid, *SessionId, *AccessToken, *Network);
 	}
 
-	SetStatus(TEXT("sample.status.openingRamp"));
+	SetStatus(TEXT("sample.status.openingWebkit"));
 
 	TWeakObjectPtr<UDappTestPanelBase> Weak(this);
-	Ramp->OpenRamp(Url, FOnRampComplete::CreateLambda(
-		[Weak](FCROSSxRampResult Result)
+	Webkit->OpenWebkit(Url, FOnWebkitComplete::CreateLambda(
+		[Weak](FCROSSxWebkitResult Result)
 		{
 			if (UDappTestPanelBase* Self = Weak.Get())
 			{
 				if (Result.bSuccess)
 				{
-					Self->Notify(TEXT("sample.ramp.closed"));
+					Self->Notify(TEXT("sample.webkit.closed"));
 				}
 				else
 				{
-					Self->NotifyArgs(TEXT("sample.ramp.failed"),
+					Self->NotifyArgs(TEXT("sample.webkit.failed"),
 						{ { TEXT("message"), Result.ErrorMessage } });
 				}
 			}
 		}));
+}
+
+
+void UDappTestPanelBase::OnClickUseCrossPay()
+{
+	UCROSSxWebkitSdkSubsystem* Webkit = ResolveWebkitSdk();
+	if (!Webkit || !Webkit->IsInitialized())
+	{
+		NotifyError(TEXT("sample.webkit.notReady"), {});
+		return;
+	}
+
+	SetStatus(TEXT("sample.status.openingCrossPay"));
+
+	TWeakObjectPtr<UDappTestPanelBase> Weak(this);
+	TWeakObjectPtr<UCROSSxWebkitSdkSubsystem> WeakWebkit(Webkit);
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(CrossPayPaymentsUrl);
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	Request->SetHeader(TEXT("Accept"), TEXT("application/json"));
+	Request->SetHeader(TEXT("Idempotency-Key"), FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens));
+	Request->SetHeader(TEXT("Authorization"), FString::Printf(TEXT("Bearer %s"), *CrossPayMerchantApiKey));
+	Request->SetContentAsString(BuildCrossPayPaymentRequestJson());
+	Request->OnProcessRequestComplete().BindLambda([Weak, WeakWebkit](FHttpRequestPtr HttpRequest, FHttpResponsePtr HttpResponse, bool bSucceeded)
+	{
+		UDappTestPanelBase* Self = Weak.Get();
+		if (!Self)
+		{
+			return;
+		}
+
+		if (!bSucceeded || !HttpResponse.IsValid())
+		{
+			Self->NotifyArgs(TEXT("sample.crossPay.failed"), { { TEXT("message"), TEXT("payment request did not complete") } });
+			return;
+		}
+
+		const int32 StatusCode = HttpResponse->GetResponseCode();
+		const FString ResponseBody = HttpResponse->GetContentAsString();
+		if (StatusCode < 200 || StatusCode >= 300)
+		{
+			Self->NotifyArgs(TEXT("sample.crossPay.failed"),
+				{ { TEXT("message"), FString::Printf(TEXT("HTTP %d\n%s"), StatusCode, *ResponseBody) } });
+			return;
+		}
+
+		FString CheckoutUrl;
+		FString Error;
+		if (!TryExtractCrossPayCheckoutUrl(ResponseBody, CheckoutUrl, Error))
+		{
+			Self->NotifyArgs(TEXT("sample.crossPay.failed"), { { TEXT("message"), Error } });
+			return;
+		}
+
+		UCROSSxWebkitSdkSubsystem* ResolvedWebkit = WeakWebkit.Get();
+		if (!ResolvedWebkit || !ResolvedWebkit->IsInitialized())
+		{
+			Self->NotifyError(TEXT("sample.webkit.notReady"), {});
+			return;
+		}
+
+		ResolvedWebkit->OpenWebkit(CheckoutUrl, FOnWebkitComplete::CreateLambda(
+			[Weak](FCROSSxWebkitResult Result)
+			{
+				if (UDappTestPanelBase* InnerSelf = Weak.Get())
+				{
+					if (Result.bSuccess)
+					{
+						InnerSelf->Notify(TEXT("sample.crossPay.closed"));
+					}
+					else
+					{
+						InnerSelf->NotifyArgs(TEXT("sample.crossPay.failed"),
+							{ { TEXT("message"), Result.ErrorMessage } });
+					}
+				}
+			}));
+	});
+
+	if (!Request->ProcessRequest())
+	{
+		NotifyArgs(TEXT("sample.crossPay.failed"), { { TEXT("message"), TEXT("could not start payment request") } });
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1046,7 +1189,7 @@ void UDappTestPanelBase::HandleLanguageChanged(EDappLang NewLanguage)
 void UDappTestPanelBase::OnClickEditorSimulateDeepLink()
 {
 #if WITH_EDITOR
-	// The SDK auto-registers crossx-{ProjectId} / ramp-{ProjectId} schemes on
+	// The SDK auto-registers crossx-{ProjectId} / webkit-{ProjectId} schemes on
 	// mobile. Desktop editors do not receive real deep links, so this button
 	// is a placeholder for a per-dApp simulation — external teams typically
 	// replace its body with something that matches their OAuth mock server.
@@ -1160,7 +1303,8 @@ void UDappTestPanelBase::RefreshLocalizedLabels()
 		ApplyButtonLabel(Btn_Login,                  Loc, TEXT("sample.button.login"));
 		ApplyButtonLabel(Btn_LoginGoogle,            Loc, TEXT("sample.button.loginGoogle"));
 		ApplyButtonLabel(Btn_LoginApple,             Loc, TEXT("sample.button.loginApple"));
-		ApplyButtonLabel(Btn_UseRamp,                Loc, TEXT("sample.button.useRamp"));
+		ApplyButtonLabel(Btn_UseWebkit,                Loc, TEXT("sample.button.useWebkit"));
+		ApplyButtonLabel(Btn_UseCrossPay,              Loc, TEXT("sample.button.useCrossPay"));
 		ApplyButtonLabel(Btn_CreateWallet,           Loc, TEXT("sample.button.createWallet"));
 		ApplyButtonLabel(Btn_GetAddress,             Loc, TEXT("sample.button.getAddress"));
 		ApplyButtonLabel(Btn_GetAllAddresses,        Loc, TEXT("sample.button.getAllAddresses"));
@@ -1211,17 +1355,17 @@ UCROSSxSdkSubsystem* UDappTestPanelBase::ResolveSdk() const
 	return nullptr;
 }
 
-UCROSSxRampSdkSubsystem* UDappTestPanelBase::ResolveRampSdk() const
+UCROSSxWebkitSdkSubsystem* UDappTestPanelBase::ResolveWebkitSdk() const
 {
 	if (const ADappActor* Actor = ResolveActor())
 	{
-		return Actor->GetRampSdk();
+		return Actor->GetWebkitSdk();
 	}
 	if (const UWorld* World = GetWorld())
 	{
 		if (UGameInstance* GI = World->GetGameInstance())
 		{
-			return GI->GetSubsystem<UCROSSxRampSdkSubsystem>();
+			return GI->GetSubsystem<UCROSSxWebkitSdkSubsystem>();
 		}
 	}
 	return nullptr;

@@ -23,7 +23,7 @@
 			"Enabled": true
 		},
 		{
-			"Name": "CROSSxRampSdkUnrealPlugin",
+			"Name": "CROSSxWebkitSdkUnrealPlugin",
 			"Enabled": true
 		}
 	]

@@ -101,7 +101,7 @@ sdk-verify: ## Check installed .uplugin VersionName matches manifest/lock
 	@./scripts/install-plugins.sh --verify
 
 sdk-clean: ## Remove ./Plugins/CROSSx* (next sdk-install will re-fetch)
-	@rm -rf Plugins/CROSSxSdkUnrealPlugin Plugins/CROSSxRampSdkUnrealPlugin
+	@rm -rf Plugins/CROSSxSdkUnrealPlugin Plugins/CROSSxWebkitSdkUnrealPlugin
 	@echo "cleaned Plugins/CROSSx*"
 
 # ----------- Group 2: build / package / device automation -------------------

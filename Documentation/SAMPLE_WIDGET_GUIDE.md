@@ -120,8 +120,9 @@ Parent container: `Panel_Features`.
 | `Btn_RefreshToken`           | `Button`                      | `RefreshTokenAsync`                   |
 | `Btn_GetUserInfo`            | `Button`                      | `GetUserInfoAsync`                    |
 | `Btn_SignOut`                | `Button`                      | `SignOutAsync`                        |
-| `Inp_RampUrl`                | `EditableTextBox`             | Full Ramp URL                         |
-| `Btn_UseRamp`                | `Button`                      | `OpenRamp`                            |
+| `Inp_WebkitUrl`                | `EditableTextBox`             | Full Webkit URL                         |
+| `Btn_UseWebkit`                | `Button`                      | `OpenWebkit` with Ramp URL             |
+| `Btn_UseCrossPay`              | `Button`                      | `OpenWebkit` with CROSS Pay URL        |
 | `Btn_ToggleLanguage`         | `Button`                      | Flip KO ↔ EN                          |
 | `Txt_Language`               | `TextBlock`                   | Current lang tag                      |
 
@@ -243,4 +244,4 @@ notification visuals; you can use any existing toast widget you already own.
       recompiling C++
 
 Anything broken? Check `Saved/Logs/*.log` — `LogDappPanel`, `LogDappActor`,
-`LogCROSSxSdk`, and `LogCROSSxRamp` are the four categories to grep.
+`LogCROSSxSdk`, and `LogCROSSxWebkit` are the four categories to grep.

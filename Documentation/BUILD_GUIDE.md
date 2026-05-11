@@ -100,7 +100,7 @@ UE 의 `Launch on Device (iOS)` 를 쓰는 게 가장 빠릅니다 (Editor 메�
 |------|-------------|
 | `[CROSSx SDK] ProjectId is empty in DefaultGame.ini. Aborting build.` | Project Settings 에서 ProjectId 입력 (위 §0 참조) |
 | `Could not find IOS_xx Provision...` | UAT 자체 서명 시도. 위 §2.2 흐름으로 Xcode 서명 사용 |
-| 앱이 OAuth / Ramp 후 복귀하지 않음 | `crossx-{ProjectId}` URL Scheme 미등록 — ProjectId 가 빈 채로 빌드된 경우. 다시 빌드 |
+| 앱이 OAuth / Webkit 후 복귀하지 않음 | `crossx-{ProjectId}` URL Scheme 미등록 — ProjectId 가 빈 채로 빌드된 경우. 다시 빌드 |
 
 ---
 
@@ -143,10 +143,10 @@ make deploy-android                  # android + install-android
 
 ```bash
 adb shell pm dump com.nexus.crossx.sdk.unrealsample.android | \
-  grep -E "scheme=(crossx|ramp)-"
+  grep -E "scheme=(crossx|webkit)-"
 ```
 
-`crossx-<ProjectId>` 와 `ramp-<ProjectId>` 두 줄이 보여야 정상입니다.
+`crossx-<ProjectId>` 와 `webkit-<ProjectId>` 두 줄이 보여야 정상입니다.
 없으면 ProjectId 가 비어 있던 채로 빌드된 것 — 다시 입력 후 빌드.
 
 ### 3.4 자주 만나는 이슈
@@ -173,7 +173,7 @@ make mac-archive         # 동일 + Saved/Archive/Mac
 ```
 
 > Win64 / Mac 데스크톱 빌드의 딥링크 등록은 Unreal 의 표준 동작 범위
-> 밖입니다. SDK 의 OAuth / Ramp 플로우는 모바일/Editor PIE 환경을
+> 밖입니다. SDK 의 OAuth / Webkit 플로우는 모바일/Editor PIE 환경을
 > 1순위로 검증합니다.
 
 ---

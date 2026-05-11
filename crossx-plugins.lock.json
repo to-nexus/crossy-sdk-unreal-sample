@@ -7,10 +7,10 @@
       "sha256": "70be9784c72289a4a96d4d64f910e4488029b39f17c05ed34852c3a909ee0f82",
       "installed_at": "2026-05-08T02:32:05Z"
     },
-    "CROSSxRampSdkUnrealPlugin": {
+    "CROSSxWebkitSdkUnrealPlugin": {
       "version": "0.0.0-beta.11",
-      "tag": "CROSSxRampSdkUnrealPlugin@v0.0.0-beta.11",
-      "asset": "CROSSxRampSdkUnrealPlugin-0.0.0-beta.11.zip",
+      "tag": "CROSSxWebkitSdkUnrealPlugin@v0.0.0-beta.11",
+      "asset": "CROSSxWebkitSdkUnrealPlugin-0.0.0-beta.11.zip",
       "sha256": "9c00713d9ecb7e59c8d6ed45ccb72bcb8edcd010d9cedbef6fbad7872cfe4f20",
       "installed_at": "2026-05-08T02:32:05Z"
     }
