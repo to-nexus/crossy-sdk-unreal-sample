@@ -83,7 +83,7 @@ help: ## Show this help
 
 # ----------- Group 1: SDK plugin management ---------------------------------
 
-.PHONY: sdk-install sdk-update sdk-verify sdk-clean
+.PHONY: sdk-install sdk-update sdk-verify sdk-clean localization-import
 
 sdk-install: ## Install / reconcile plugins per crossx-plugins.json (no token needed for the public default registry)
 	@./scripts/install-plugins.sh
@@ -103,6 +103,9 @@ sdk-verify: ## Check installed .uplugin VersionName matches manifest/lock
 sdk-clean: ## Remove ./Plugins/CROSSx* (next sdk-install will re-fetch)
 	@rm -rf Plugins/CROSSxSdkUnrealPlugin Plugins/CROSSxWebkitSdkUnrealPlugin
 	@echo "cleaned Plugins/CROSSx*"
+
+localization-import: ## Reimport Localization/DT_DappStrings.csv into the cooked DataTable asset
+	@./scripts/import-dapp-strings.sh
 
 # ----------- Group 2: build / package / device automation -------------------
 #
