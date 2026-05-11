@@ -7,7 +7,7 @@
     "repo": "crossy-sdk-unreal-sample"
   },
   "plugins": {
-    "CROSSxSdkUnrealPlugin": "0.0.0-beta.13",
-    "CROSSxWebkitSdkUnrealPlugin": "0.0.0-beta.11"
+    "CROSSxSdkUnrealPlugin": "0.0.0-beta.14",
+    "CROSSxWebkitSdkUnrealPlugin": "0.0.0-beta.1"
   }
 }
