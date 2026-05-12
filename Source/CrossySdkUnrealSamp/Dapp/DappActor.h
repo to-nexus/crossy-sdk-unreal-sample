@@ -7,7 +7,6 @@
 #include "DappActor.generated.h"
 
 class UCROSSxSdkSubsystem;
-class UCROSSxWebkitSdkSubsystem;
 class UDappLocalizationSubsystem;
 class UDappNotificationSubsystem;
 
@@ -24,10 +23,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnDappSdkAuthChanged, bool, bLogged
  *   1) Resolves UCROSSxSdkSettings::GetProjectId() (set via Project Settings).
  *   2) Builds FCROSSxSdkConfig with platform-appropriate AppId, Theme, Locale.
  *   3) Calls CROSSxSdkSubsystem::Configure() + InitializeSdkAsync().
- *   4) Initializes CROSSxWebkitSdkSubsystem with the same ProjectId.
- *   5) Bridges SDK events (sign-in, sign-out, session-expired) to Blueprint
+ *   4) Bridges SDK events (sign-in, sign-out, session-expired) to Blueprint
  *      multicast delegates that UDappTestPanelBase listens to.
- *   6) Keeps the SDK locale in sync with UDappLocalizationSubsystem.
+ *   5) Keeps the SDK locale in sync with UDappLocalizationSubsystem.
  *
  * Intentionally does NOT touch UI. The test panel widget is created and added
  * to the viewport by the Player Controller's HUD/BeginPlay (see P3.8 guide)
@@ -44,7 +42,6 @@ public:
 	// ─── Public state (read-only from UI) ───
 
 	UFUNCTION(BlueprintPure, Category = "Dapp") UCROSSxSdkSubsystem*     GetSdk() const;
-	UFUNCTION(BlueprintPure, Category = "Dapp") UCROSSxWebkitSdkSubsystem* GetWebkitSdk() const;
 
 	UFUNCTION(BlueprintPure, Category = "Dapp")
 	bool IsSdkInitialized() const;
@@ -121,7 +118,6 @@ private:
 	FString LocaleCodeForLanguage(EDappLang Lang) const;
 
 	UCROSSxSdkSubsystem*        ResolveSdk() const;
-	UCROSSxWebkitSdkSubsystem*    ResolveWebkitSdk() const;
 	UDappLocalizationSubsystem* ResolveLocalization() const;
 	UDappNotificationSubsystem* ResolveNotifications() const;
 

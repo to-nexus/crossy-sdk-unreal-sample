@@ -83,14 +83,17 @@ make sdk-install
 
 (필요 시 `crossx-plugins.json` 의 버전 핀을 먼저 원하는 값으로 수정)
 
+> `CrossxDependencies` 가 포함된 `CROSSxSdkUnrealPlugin` 릴리스부터는 `crossx-plugins.json` 에 메인 SDK만 명시하면 됩니다. 이전 릴리스를 사용하는 동안에는 Webkit 항목을 명시적으로 유지하세요.
+
 스크립트가 수행하는 일:
 
-1. `crossx-plugins.json` → `registry.owner/repo` 와 각 플러그인 버전 읽기
+1. `crossx-plugins.json` → `registry.owner/repo` 와 최상위 SDK 버전 읽기
 2. GitHub Releases 에서 태그 `<PluginName>@v<version>` 조회
 3. 자산 `<PluginName>-<version>.zip` 다운로드 + SHA-256 계산
 4. `Plugins/<PluginName>/` 아래로 해제
 5. 해제된 `.uplugin` 의 `VersionName` 이 요청 버전과 일치하는지 검증
-6. `crossx-plugins.lock.json` 에 version/tag/asset/sha256/installed_at 기록
+6. `.uplugin` 의 `CrossxDependencies` 를 읽어 Webkit 같은 내부 의존 플러그인을 자동 설치
+7. `crossx-plugins.lock.json` 에 version/tag/asset/sha256/installed_at 기록
 
 두 번째 실행부터는 lock 의 sha256 과 동일하면 다운로드를 생략합니다.
 
@@ -107,17 +110,17 @@ pwsh ./scripts/install-plugins.ps1
 ### 3.1 한 줄 업데이트
 
 ```bash
-make sdk-update name=CROSSxSdkUnrealPlugin     version=0.3.0
-make sdk-update name=CROSSxWebkitSdkUnrealPlugin version=0.3.0
+make sdk-update name=CROSSxSdkUnrealPlugin version=0.3.0
 ```
+
+`CROSSxWebkitSdkUnrealPlugin` 버전은 `CROSSxSdkUnrealPlugin` 릴리스가 고정한 `CrossxDependencies` 를 따라 자동으로 설치됩니다.
 
 ### 3.2 수동 편집 후 동기화
 
 ```diff
  "plugins": {
--  "CROSSxSdkUnrealPlugin":     "0.0.0-beta.1",
-+  "CROSSxSdkUnrealPlugin":     "0.3.0",
-   "CROSSxWebkitSdkUnrealPlugin": "0.0.0-beta.1"
+-  "CROSSxSdkUnrealPlugin": "0.0.0-beta.1"
++  "CROSSxSdkUnrealPlugin": "0.3.0"
  }
 ```
 

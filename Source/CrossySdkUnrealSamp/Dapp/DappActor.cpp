@@ -7,8 +7,6 @@
 
 #include "SDK/CROSSxSdkSubsystem.h"
 #include "Core/Types/CROSSxSdkSettings.h"
-#include "CROSSxWebkitSdkSubsystem.h"
-#include "CROSSxWebkitTypes.h"
 
 #include "Localization/DappLocalizationSubsystem.h"
 #include "UI/DappNotificationSubsystem.h"
@@ -34,7 +32,6 @@ ADappActor* ADappActor::Find(const UObject* WorldContext)
 }
 
 UCROSSxSdkSubsystem* ADappActor::GetSdk() const           { return ResolveSdk(); }
-UCROSSxWebkitSdkSubsystem* ADappActor::GetWebkitSdk() const   { return ResolveWebkitSdk(); }
 
 bool ADappActor::IsSdkInitialized() const
 {
@@ -66,7 +63,6 @@ void ADappActor::BeginPlay()
 	Super::BeginPlay();
 
 	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
-	UCROSSxWebkitSdkSubsystem* Webkit = ResolveWebkitSdk();
 
 	if (!Sdk)
 	{
@@ -117,16 +113,6 @@ void ADappActor::BeginPlay()
 	FCROSSxAuthResultDelegate InitDelegate;
 	InitDelegate.BindDynamic(this, &ADappActor::HandleSdkInitialized);
 	Sdk->InitializeSdkAsync(InitDelegate);
-
-	// Webkit is a simple companion SDK — InitWebkit just stages browser adapter +
-	// freezes the ProjectId. Opening the webkit page is a dApp-call later.
-	if (Webkit)
-	{
-		FCROSSxWebkitConfig WebkitCfg;
-		WebkitCfg.ProjectId = Config.ProjectId;
-		WebkitCfg.bDebug    = bEnableDebugLogs;
-		Webkit->InitWebkit(WebkitCfg);
-	}
 }
 
 void ADappActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -275,17 +261,6 @@ UCROSSxSdkSubsystem* ADappActor::ResolveSdk() const
 	return nullptr;
 }
 
-UCROSSxWebkitSdkSubsystem* ADappActor::ResolveWebkitSdk() const
-{
-	if (const UWorld* World = GetWorld())
-	{
-		if (UGameInstance* GI = World->GetGameInstance())
-		{
-			return GI->GetSubsystem<UCROSSxWebkitSdkSubsystem>();
-		}
-	}
-	return nullptr;
-}
 
 UDappLocalizationSubsystem* ADappActor::ResolveLocalization() const
 {

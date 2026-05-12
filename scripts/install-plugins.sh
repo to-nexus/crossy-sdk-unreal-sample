@@ -73,6 +73,12 @@ REG_TYPE=$(jq -r '.registry.type' "$MANIFEST")
 
 API="https://api.github.com/repos/${OWNER}/${REPO}"
 
+QUEUE="$(mktemp -t crossx-plugin-queue-XXXXXX)"
+DESIRED="$(mktemp -t crossx-plugin-desired-XXXXXX)"
+PROCESSED="$(mktemp -t crossx-plugin-processed-XXXXXX)"
+cleanup() { rm -f "$QUEUE" "$DESIRED" "$PROCESSED"; }
+trap cleanup EXIT
+
 # ---------- helpers ---------------------------------------------------------
 
 sha256_of() { $SHA_CMD "$1" | awk '{print $1}'; }
@@ -82,55 +88,105 @@ plugin_tag()   { printf '%s@v%s' "$1" "$2"; }
 # $1=name  $2=version
 plugin_asset() { printf '%s-%s.zip' "$1" "$2"; }
 
-# ---------- verify mode -----------------------------------------------------
+# $1=name  $2=version  $3=source label
+enqueue_plugin() {
+    name="$1"
+    version="$2"
+    source_label="$3"
 
-if [[ "$MODE" == "verify" ]]; then
-    failed=0
-    while IFS=$'\t' read -r name want_version; do
-        [[ -z "$name" ]] && continue
-        uplugin="$PLUGINS_DIR/$name/$name.uplugin"
-        if [[ ! -f "$uplugin" ]]; then
-            echo "[fail] $name: not installed"
-            failed=1; continue
+    existing=$(awk -F '\t' -v n="$name" '$1 == n { print $2; exit }' "$DESIRED")
+    if [[ -n "$existing" ]]; then
+        if [[ "$existing" != "$version" ]]; then
+            echo "[err] $name: version conflict ($existing vs $version from $source_label)" >&2
+            exit 1
         fi
-        actual=$(jq -r '.VersionName' "$uplugin")
-        locked=$(jq -r --arg n "$name" '.plugins[$n].version // empty' "$LOCK")
-        if [[ "$actual" != "$want_version" ]]; then
-            echo "[fail] $name: .uplugin=$actual, manifest=$want_version"
-            failed=1
-        elif [[ -n "$locked" && "$locked" != "$want_version" ]]; then
-            echo "[warn] $name: lock=$locked, manifest=$want_version (run sdk-install)"
-            failed=1
-        else
-            echo "[ok]   $name: $actual"
-        fi
-    done < <(jq -r '.plugins | to_entries[] | select(.value|type=="string") | "\(.key)\t\(.value)"' "$MANIFEST")
-    exit $failed
-fi
-
-# ---------- install mode ----------------------------------------------------
-
-mkdir -p "$PLUGINS_DIR"
-
-# Process string-version entries only. Object entries (local mode) are skipped.
-jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
-    name=$(  echo "$entry" | jq -r '.key')
-    vtype=$( echo "$entry" | jq -r '.value | type')
-
-    if [[ "$vtype" == "object" ]]; then
-        src=$(echo "$entry" | jq -r '.value.source // ""')
-        if [[ "$src" == "local" ]]; then
-            path=$(echo "$entry" | jq -r '.value.path')
-            echo "[skip] $name: local mode -> $path (manage manually)"
-            continue
-        fi
-        echo "[err] $name: unsupported object value: $(echo "$entry" | jq -c '.value')" >&2
-        exit 1
+        return
     fi
 
-    version=$(echo "$entry" | jq -r '.value')
+    printf '%s\t%s\n' "$name" "$version" >> "$DESIRED"
+    printf '%s\t%s\n' "$name" "$version" >> "$QUEUE"
+}
+
+# $1=uplugin path  $2=source plugin name
+enqueue_crossx_dependencies() {
+    uplugin="$1"
+    source_name="$2"
+    [[ -f "$uplugin" ]] || return
+
+    jq -r '.CrossxDependencies // {} | to_entries[] | "\(.key)\t\(.value)"' "$uplugin" |
+    while IFS=$'\t' read -r dep_name dep_version; do
+        [[ -z "$dep_name" ]] && continue
+        echo "[dep]  $source_name requires $dep_name@$dep_version"
+        enqueue_plugin "$dep_name" "$dep_version" "$source_name.CrossxDependencies"
+    done
+}
+
+seed_manifest_queue() {
+    jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
+        name=$(  echo "$entry" | jq -r '.key')
+        vtype=$( echo "$entry" | jq -r '.value | type')
+
+        if [[ "$vtype" == "object" ]]; then
+            src=$(echo "$entry" | jq -r '.value.source // ""')
+            if [[ "$src" == "local" ]]; then
+                path=$(echo "$entry" | jq -r '.value.path')
+                echo "[skip] $name: local mode -> $path (manage manually)"
+                continue
+            fi
+            echo "[err] $name: unsupported object value: $(echo "$entry" | jq -c '.value')" >&2
+            exit 1
+        fi
+
+        version=$(echo "$entry" | jq -r '.value')
+        enqueue_plugin "$name" "$version" "crossx-plugins.json"
+    done
+}
+
+# $1=name  $2=version
+verify_plugin() {
+    name="$1"
+    want_version="$2"
+    uplugin="$PLUGINS_DIR/$name/$name.uplugin"
+    if [[ ! -f "$uplugin" ]]; then
+        echo "[fail] $name: not installed"
+        return 1
+    fi
+
+    actual=$(jq -r '.VersionName' "$uplugin")
+    locked=$(jq -r --arg n "$name" '.plugins[$n].version // empty' "$LOCK")
+    if [[ "$actual" != "$want_version" ]]; then
+        echo "[fail] $name: .uplugin=$actual, expected=$want_version"
+        return 1
+    elif [[ -n "$locked" && "$locked" != "$want_version" ]]; then
+        echo "[warn] $name: lock=$locked, expected=$want_version (run sdk-install)"
+        return 1
+    fi
+
+    echo "[ok]   $name: $actual"
+    enqueue_crossx_dependencies "$uplugin" "$name"
+    return 0
+}
+
+# $1=name  $2=version
+install_plugin() {
+    name="$1"
+    version="$2"
     tag=$(plugin_tag "$name" "$version")
     asset=$(plugin_asset "$name" "$version")
+
+    # Short-circuit if already installed at the same version.
+    prev_sha=$(jq -r --arg n "$name" '.plugins[$n].sha256 // empty' "$LOCK")
+    prev_ver=$(jq -r --arg n "$name" '.plugins[$n].version // empty' "$LOCK")
+    uplugin="$PLUGINS_DIR/$name/$name.uplugin"
+    if [[ "$FORCE" != "true" \
+          && "$prev_ver" == "$version" \
+          && -n "$prev_sha" \
+          && -d "$PLUGINS_DIR/$name" \
+          && -f "$uplugin" ]]; then
+        echo "[ok]   $name@$version (up to date)"
+        enqueue_crossx_dependencies "$uplugin" "$name"
+        return
+    fi
 
     # 1) Resolve asset URL via Releases API
     release_json=$(github_curl -fsSL \
@@ -146,19 +202,7 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
         echo "      available: $(echo "$release_json" | jq -r '.assets[].name' | paste -sd, -)" >&2
         exit 1; }
 
-    # 2) Short-circuit if already installed at the same version
-    prev_sha=$(jq -r --arg n "$name" '.plugins[$n].sha256 // empty' "$LOCK")
-    prev_ver=$(jq -r --arg n "$name" '.plugins[$n].version // empty' "$LOCK")
-    if [[ "$FORCE" != "true" \
-          && "$prev_ver" == "$version" \
-          && -n "$prev_sha" \
-          && -d "$PLUGINS_DIR/$name" \
-          && -f "$PLUGINS_DIR/$name/$name.uplugin" ]]; then
-        echo "[ok]   $name@$version (up to date)"
-        continue
-    fi
-
-    # 3) Download
+    # 2) Download
     tmpzip="$(mktemp -t crossx-plugin-XXXXXX).zip"
     echo "[get]  $name@$version  <-  ${OWNER}/${REPO}  ($asset)"
     github_curl -fSL --progress-bar \
@@ -167,12 +211,12 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
 
     sha=$(sha256_of "$tmpzip")
 
-    # 4) Unpack
+    # 3) Unpack
     rm -rf "$PLUGINS_DIR/$name"
     unzip -q "$tmpzip" -d "$PLUGINS_DIR"
     rm -f "$tmpzip"
 
-    # 5) Validate .uplugin VersionName
+    # 4) Validate .uplugin VersionName
     uplugin="$PLUGINS_DIR/$name/$name.uplugin"
     [[ -f "$uplugin" ]] || {
         echo "[err] $name: $name.uplugin missing after extraction" >&2; exit 1; }
@@ -182,7 +226,7 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
         exit 1
     fi
 
-    # 6) Update lock file
+    # 5) Update lock file
     ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     tmp="$(mktemp)"
     jq --arg n "$name" --arg v "$version" --arg t "$tag" \
@@ -192,6 +236,45 @@ jq -c '.plugins | to_entries[]' "$MANIFEST" | while read -r entry; do
     mv "$tmp" "$LOCK"
 
     echo "[done] $name@$version  sha256=${sha:0:12}…"
+    enqueue_crossx_dependencies "$uplugin" "$name"
+}
+
+# ---------- process queue ---------------------------------------------------
+
+seed_manifest_queue
+
+if [[ "$MODE" == "install" ]]; then
+    mkdir -p "$PLUGINS_DIR"
+fi
+
+failed=0
+queue_index=1
+while true; do
+    queued=$(wc -l < "$QUEUE" | tr -d ' ')
+    if [[ "$queue_index" -gt "$queued" ]]; then
+        break
+    fi
+
+    line=$(sed -n "${queue_index}p" "$QUEUE")
+    queue_index=$((queue_index + 1))
+    name=${line%%$'\t'*}
+    version=${line#*$'\t'}
+    [[ -z "$name" ]] && continue
+
+    if grep -Fqx "$name" "$PROCESSED"; then
+        continue
+    fi
+    echo "$name" >> "$PROCESSED"
+
+    if [[ "$MODE" == "verify" ]]; then
+        verify_plugin "$name" "$version" || failed=1
+    else
+        install_plugin "$name" "$version"
+    fi
 done
+
+if [[ "$MODE" == "verify" ]]; then
+    exit $failed
+fi
 
 echo "All plugins in sync with crossx-plugins.json."

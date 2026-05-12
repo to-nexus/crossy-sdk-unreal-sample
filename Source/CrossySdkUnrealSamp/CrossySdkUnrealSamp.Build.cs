@@ -20,8 +20,7 @@ public class CrossySdkUnrealSamp : ModuleRules
 			"SlateCore",
 			"Json",
 			"JsonUtilities",
-			"CROSSxSdkUnrealPlugin",
-			"CROSSxWebkitSdkUnrealPlugin"
+			"CROSSxSdkUnrealPlugin"
 		});
 
 		// HTTP brings in FGenericPlatformHttp::UrlEncode, used by

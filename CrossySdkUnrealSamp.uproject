@@ -21,10 +21,6 @@
 		{
 			"Name": "CROSSxSdkUnrealPlugin",
 			"Enabled": true
-		},
-		{
-			"Name": "CROSSxWebkitSdkUnrealPlugin",
-			"Enabled": true
 		}
 	]
 }

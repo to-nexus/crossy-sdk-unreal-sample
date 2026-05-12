@@ -18,7 +18,6 @@ class ADappActor;
 class UDappLocalizationSubsystem;
 class UDappNotificationSubsystem;
 class UCROSSxSdkSubsystem;
-class UCROSSxWebkitSdkSubsystem;
 
 /**
  * UDappTestPanelBase — C++ base class for the sample test panel widget.
@@ -217,12 +216,14 @@ protected:
 	UFUNCTION() void HandleSendTokenTxResult(const FCROSSxSendTxResponse& Result);
 	UFUNCTION() void HandleGetUserInfoResult(const FCROSSxSdkUserInfo& Info);
 	UFUNCTION() void HandleRefreshTokenResult(const FCROSSxRefreshTokenResult& Result);
+	UFUNCTION() void HandleWebViewResult(const FCROSSxWebViewResult& Result);
+	UFUNCTION() void HandleCrossPayCheckoutUrlResult(const FCROSSxCrossPayCheckoutUrlResult& Result);
+	UFUNCTION() void HandleCrossPayWebViewResult(const FCROSSxWebViewResult& Result);
 
 private:
 	// ── Resolvers ──────────────────────────────────────────
 	ADappActor*                 ResolveActor() const;
 	UCROSSxSdkSubsystem*        ResolveSdk() const;
-	UCROSSxWebkitSdkSubsystem*    ResolveWebkitSdk() const;
 	UDappLocalizationSubsystem* ResolveLoc() const;
 	UDappNotificationSubsystem* ResolveNotif() const;
 

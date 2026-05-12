@@ -121,8 +121,8 @@ Parent container: `Panel_Features`.
 | `Btn_GetUserInfo`            | `Button`                      | `GetUserInfoAsync`                    |
 | `Btn_SignOut`                | `Button`                      | `SignOutAsync`                        |
 | `Inp_WebkitUrl`                | `EditableTextBox`             | Full Webkit URL                         |
-| `Btn_UseWebkit`                | `Button`                      | `OpenWebkit` with Ramp URL             |
-| `Btn_UseCrossPay`              | `Button`                      | `OpenWebkit` with CROSS Pay URL        |
+| `Btn_UseWebkit`                | `Button`                      | `CROSSxSDK OpenWebView` with Ramp URL  |
+| `Btn_UseCrossPay`              | `Button`                      | `CROSSxSDK CreateCrossPayCheckoutUrl + OpenWebView` |
 | `Btn_ToggleLanguage`         | `Button`                      | Flip KO ↔ EN                          |
 | `Txt_Language`               | `TextBlock`                   | Current lang tag                      |
 
