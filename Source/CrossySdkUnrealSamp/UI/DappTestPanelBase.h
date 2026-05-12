@@ -219,6 +219,7 @@ protected:
 	UFUNCTION() void HandleWebViewResult(const FCROSSxWebViewResult& Result);
 	UFUNCTION() void HandleCrossPayCheckoutUrlResult(const FCROSSxCrossPayCheckoutUrlResult& Result);
 	UFUNCTION() void HandleCrossPayWebViewResult(const FCROSSxWebViewResult& Result);
+	UFUNCTION() void HandleCrossPayPaymentResult(const FCROSSxCrossPayPaymentResult& Result);
 
 private:
 	// ── Resolvers ──────────────────────────────────────────

@@ -1024,9 +1024,9 @@ void UDappTestPanelBase::OnClickUseCrossPay()
 	}
 
 	SetStatus(TEXT("sample.status.openingCrossPay"));
-	FCROSSxCrossPayCheckoutUrlDelegate Delegate;
-	Delegate.BindDynamic(this, &UDappTestPanelBase::HandleCrossPayCheckoutUrlResult);
-	Sdk->CreateCrossPayCheckoutUrlAsync(BuildCrossPayPaymentRequest(), Delegate);
+	FCROSSxCrossPayPaymentDelegate Delegate;
+	Delegate.BindDynamic(this, &UDappTestPanelBase::HandleCrossPayPaymentResult);
+	Sdk->OpenCrossPayAndWaitResultAsync(BuildCrossPayPaymentRequest(), Delegate);
 }
 
 void UDappTestPanelBase::HandleWebViewResult(const FCROSSxWebViewResult& Result)
@@ -1059,6 +1059,26 @@ void UDappTestPanelBase::HandleCrossPayCheckoutUrlResult(const FCROSSxCrossPayCh
 	FCROSSxWebViewDelegate Delegate;
 	Delegate.BindDynamic(this, &UDappTestPanelBase::HandleCrossPayWebViewResult);
 	Sdk->OpenWebView(Result.CheckoutUrl, Delegate);
+}
+
+
+void UDappTestPanelBase::HandleCrossPayPaymentResult(const FCROSSxCrossPayPaymentResult& Result)
+{
+	if (!Result.bSuccess)
+	{
+		NotifyArgs(TEXT("sample.crossPay.failed"), { { TEXT("message"), Result.ErrorMessage } });
+		return;
+	}
+
+	NotifyArgs(TEXT("sample.crossPay.result"),
+	{
+		{ TEXT("status"), Result.StatusText },
+		{ TEXT("paymentId"), Result.Id.IsEmpty() ? TEXT("-") : Result.Id },
+		{ TEXT("checkoutId"), Result.CheckoutId.IsEmpty() ? TEXT("-") : Result.CheckoutId },
+		{ TEXT("amount"), FString::Printf(TEXT("%s %s"), *Result.Amount, *Result.Currency).TrimStartAndEnd() },
+		{ TEXT("provider"), Result.ProviderText.IsEmpty() ? TEXT("-") : Result.ProviderText },
+		{ TEXT("orderId"), Result.Metadata.OrderId.IsEmpty() ? TEXT("-") : Result.Metadata.OrderId },
+	});
 }
 
 void UDappTestPanelBase::HandleCrossPayWebViewResult(const FCROSSxWebViewResult& Result)

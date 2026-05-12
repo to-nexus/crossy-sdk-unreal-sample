@@ -76,4 +76,5 @@ sample.button.editorSimulateDeepLink,"딥링크 시뮬레이션","Simulate Deep 
 sample.button.useCrossPay,"Use CROSS Pay","Use CROSS Pay"
 sample.status.openingCrossPay,"CROSS Pay 여는 중…","Opening CROSS Pay…"
 sample.crossPay.closed,"CROSS Pay 페이지를 닫았습니다","CROSS Pay page closed"
+sample.crossPay.result,"CROSS Pay 결제 결과\n\n상태: {status}\nPayment ID: {paymentId}\nCheckout ID: {checkoutId}\n금액: {amount}\nProvider: {provider}\n주문 ID: {orderId}","CROSS Pay Payment Result\n\nStatus: {status}\nPayment ID: {paymentId}\nCheckout ID: {checkoutId}\nAmount: {amount}\nProvider: {provider}\nOrder ID: {orderId}"
 sample.crossPay.failed,"CROSS Pay 실패: {message}","CROSS Pay failed: {message}"
