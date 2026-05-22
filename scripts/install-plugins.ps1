@@ -8,9 +8,9 @@
         pwsh ./scripts/install-plugins.ps1 -Force        # re-download
 
     The default registry repo is public, so no authentication is required.
-    If you hit GitHub's anonymous rate limit (60 requests/hour, e.g. on a
-    shared CI runner), set $env:GITHUB_TOKEN to any GitHub PAT — public
-    repos do not require any specific scopes.
+    Public release assets are downloaded directly from github.com without using
+    the GitHub REST API. Set $env:GITHUB_TOKEN only when pointing the registry
+    at a private repo.
 
     Requires: PowerShell 7+ (Expand-Archive, Invoke-WebRequest, ConvertFrom-Json)
 #>
@@ -44,6 +44,10 @@ $Api   = "https://api.github.com/repos/$Owner/$Repo"
 
 function Sha256File([string]$Path) {
     (Get-FileHash -Algorithm SHA256 -Path $Path).Hash.ToLower()
+}
+
+function Plugin-DownloadUrl([string]$Tag, [string]$Asset) {
+    "https://github.com/$Owner/$Repo/releases/download/$Tag/$Asset"
 }
 
 $queue = [System.Collections.Generic.List[object]]::new()
@@ -130,21 +134,41 @@ function Install-Plugin([string]$Name, [string]$Version) {
         return
     }
 
-    try {
-        $rel = Invoke-RestMethod -Headers $headersJson -Uri "$Api/releases/tags/$tag"
-    } catch {
-        throw "$Name: tag '$tag' not found on $Owner/$Repo"
-    }
-
-    $assetObj = $rel.assets | Where-Object { $_.name -eq $asset } | Select-Object -First 1
-    if (-not $assetObj) {
-        $avail = ($rel.assets.name -join ', ')
-        throw "$Name: asset '$asset' not attached to tag '$tag' (available: $avail)"
-    }
-
     $tmpzip = [System.IO.Path]::GetTempFileName() + '.zip'
     Write-Host "[get]  $Name@$Version  <-  $Owner/$Repo  ($asset)"
-    Invoke-WebRequest -Headers $headersBin -Uri $assetObj.url -OutFile $tmpzip
+
+    if ($env:GITHUB_TOKEN) {
+        try {
+            $rel = Invoke-RestMethod -Headers $headersJson -Uri "$Api/releases/tags/$tag"
+        } catch {
+            if (Test-Path $tmpzip) { Remove-Item $tmpzip -Force }
+            throw "$Name: tag '$tag' not found on $Owner/$Repo or token has no access"
+        }
+
+        $assetObj = $rel.assets | Where-Object { $_.name -eq $asset } | Select-Object -First 1
+        if (-not $assetObj) {
+            if (Test-Path $tmpzip) { Remove-Item $tmpzip -Force }
+            $avail = ($rel.assets.name -join ', ')
+            throw "$Name: asset '$asset' not attached to tag '$tag' (available: $avail)"
+        }
+
+        try {
+            Invoke-WebRequest -Headers $headersBin -Uri $assetObj.url -OutFile $tmpzip
+        } catch {
+            if (Test-Path $tmpzip) { Remove-Item $tmpzip -Force }
+            throw "$Name: failed to download '$asset' from tag '$tag'"
+        }
+    } else {
+        $downloadUrl = Plugin-DownloadUrl $tag $asset
+        try {
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpzip
+        } catch {
+            if (Test-Path $tmpzip) { Remove-Item $tmpzip -Force }
+            $statusCode = $_.Exception.Response.StatusCode.value__
+            $suffix = if ($statusCode) { " (HTTP $statusCode)" } else { "" }
+            throw "$Name: failed to download '$asset' from tag '$tag'$suffix. Check that the release tag and asset name exist on $Owner/$Repo. If the repo is private, set GITHUB_TOKEN to a PAT with repo access. URL: $downloadUrl"
+        }
+    }
     $sha = Sha256File $tmpzip
 
     $dest = Join-Path $PluginsDir $Name
@@ -175,9 +199,8 @@ function Install-Plugin([string]$Name, [string]$Version) {
 
 New-Item -ItemType Directory -Path $PluginsDir -Force | Out-Null
 
-# Authorization header is attached only when a token is present. Public repos
-# can be read anonymously; a token is just a way to bypass the 60/hr
-# anonymous rate limit on shared runners.
+# Authorization header is attached only when a token is present. Public release
+# assets are downloaded directly and do not use the GitHub REST API.
 $headersJson = @{ Accept = 'application/vnd.github+json' }
 $headersBin  = @{ Accept = 'application/octet-stream' }
 if ($env:GITHUB_TOKEN) {

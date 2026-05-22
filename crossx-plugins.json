@@ -1,12 +1,12 @@
 {
   "$schema": "https://crossnexus.com/schemas/crossx-plugins.schema.json",
-  "comment": "Edit the versions below, then run `make sdk-install`. Registry repo is public, so no GITHUB_TOKEN is required (an optional token only raises GitHub's anonymous rate limit).",
+  "comment": "Edit the versions below, then run `make sdk-install`. Registry repo is public, so no GITHUB_TOKEN is required.",
   "registry": {
     "type": "github-releases",
     "owner": "to-nexus",
     "repo": "crossy-sdk-unreal-sample"
   },
   "plugins": {
-    "CROSSxSdkUnrealPlugin": "0.0.0-beta.17"
+    "CROSSxSdkUnrealPlugin": "0.0.0-beta.18"
   }
 }

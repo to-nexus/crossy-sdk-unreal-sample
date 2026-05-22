@@ -10,9 +10,9 @@
 #    --force     Force re-download even if sha256 matches
 #
 #  Requirements: bash >=3.2, curl, jq, unzip, shasum OR sha256sum
-#  Env: GITHUB_TOKEN  (OPTIONAL — only needed to raise GitHub's anonymous
-#                     rate limit (60/hr -> 5000/hr) or to read a private
-#                     registry. The default registry repo is public.)
+#  Env: GITHUB_TOKEN  (OPTIONAL — only needed when pointing the registry at a
+#                     private repo. Public release assets are downloaded without
+#                     using the GitHub REST API.)
 # ----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -50,9 +50,10 @@ fi
 [[ -f "$MANIFEST" ]] || { echo "[err] manifest not found: $MANIFEST" >&2; exit 1; }
 [[ -f "$LOCK"     ]] || printf '{\n  "plugins": {}\n}\n' > "$LOCK"
 
-# GITHUB_TOKEN is optional: GitHub Releases on a public repo can be read
-# anonymously. We attach Authorization only when a token is present, mainly
-# to bypass the 60/hr anonymous rate limit on shared CI runners.
+# GITHUB_TOKEN is optional. The default public registry downloads release assets
+# directly from github.com, avoiding the GitHub REST API's anonymous rate limit.
+# We attach Authorization only when a token is present, mainly for private
+# registry repos.
 #
 # Keep this as a wrapper instead of an optional bash array: macOS still ships
 # bash 3.2, where expanding an empty array under `set -u` can fail with
@@ -87,6 +88,10 @@ sha256_of() { $SHA_CMD "$1" | awk '{print $1}'; }
 plugin_tag()   { printf '%s@v%s' "$1" "$2"; }
 # $1=name  $2=version
 plugin_asset() { printf '%s-%s.zip' "$1" "$2"; }
+# $1=tag   $2=asset
+plugin_download_url() {
+    printf 'https://github.com/%s/%s/releases/download/%s/%s' "$OWNER" "$REPO" "$1" "$2"
+}
 
 # $1=name  $2=version  $3=source label
 enqueue_plugin() {
@@ -188,35 +193,59 @@ install_plugin() {
         return
     fi
 
-    # 1) Resolve asset URL via Releases API
-    release_json=$(github_curl -fsSL \
-        -H "Accept: application/vnd.github+json" \
-        "${API}/releases/tags/${tag}") || {
-        echo "[err] $name: tag '$tag' not found on ${OWNER}/${REPO}" >&2
-        echo "      (If you hit a rate limit, set GITHUB_TOKEN to any GitHub PAT — public repos do not require special scopes.)" >&2
-        exit 1; }
-
-    asset_url=$(echo "$release_json" | jq -r --arg a "$asset" '.assets[] | select(.name==$a) | .url')
-    [[ -n "$asset_url" && "$asset_url" != "null" ]] || {
-        echo "[err] $name: asset '$asset' not attached to tag '$tag'" >&2
-        echo "      available: $(echo "$release_json" | jq -r '.assets[].name' | paste -sd, -)" >&2
-        exit 1; }
-
-    # 2) Download
+    # 1) Download. Public installs use the stable releases/download URL to
+    # avoid GitHub's anonymous REST API limit. Authenticated installs keep the
+    # API path so private registry repos remain supported.
     tmpzip="$(mktemp -t crossx-plugin-XXXXXX).zip"
     echo "[get]  $name@$version  <-  ${OWNER}/${REPO}  ($asset)"
-    github_curl -fSL --progress-bar \
-        -H "Accept: application/octet-stream" \
-        "$asset_url" -o "$tmpzip"
+
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        release_json=$(github_curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            "${API}/releases/tags/${tag}") || {
+            rm -f "$tmpzip"
+            echo "[err] $name: tag '$tag' not found on ${OWNER}/${REPO} or token has no access" >&2
+            exit 1; }
+
+        asset_url=$(echo "$release_json" | jq -r --arg a "$asset" '.assets[] | select(.name==$a) | .url')
+        [[ -n "$asset_url" && "$asset_url" != "null" ]] || {
+            rm -f "$tmpzip"
+            echo "[err] $name: asset '$asset' not attached to tag '$tag'" >&2
+            echo "      available: $(echo "$release_json" | jq -r '.assets[].name' | paste -sd, -)" >&2
+            exit 1; }
+
+        github_curl -fSL --progress-bar \
+            -H "Accept: application/octet-stream" \
+            "$asset_url" -o "$tmpzip" || {
+            rm -f "$tmpzip"
+            echo "[err] $name: failed to download '$asset' from tag '$tag'" >&2
+            exit 1; }
+    else
+        download_url=$(plugin_download_url "$tag" "$asset")
+        if ! http_code=$(github_curl -sSL -w '%{http_code}' "$download_url" -o "$tmpzip"); then
+            rm -f "$tmpzip"
+            echo "[err] $name: failed to download '$asset' from tag '$tag'" >&2
+            echo "      url: $download_url" >&2
+            echo "      If ${OWNER}/${REPO} is private, set GITHUB_TOKEN to a PAT with repo access." >&2
+            exit 1
+        fi
+        if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
+            rm -f "$tmpzip"
+            echo "[err] $name: failed to download '$asset' from tag '$tag' (HTTP $http_code)" >&2
+            echo "      url: $download_url" >&2
+            echo "      Check that the release tag and asset name exist on ${OWNER}/${REPO}." >&2
+            exit 1
+        fi
+    fi
 
     sha=$(sha256_of "$tmpzip")
 
-    # 3) Unpack
+    # 2) Unpack
     rm -rf "$PLUGINS_DIR/$name"
     unzip -q "$tmpzip" -d "$PLUGINS_DIR"
     rm -f "$tmpzip"
 
-    # 4) Validate .uplugin VersionName
+    # 3) Validate .uplugin VersionName
     uplugin="$PLUGINS_DIR/$name/$name.uplugin"
     [[ -f "$uplugin" ]] || {
         echo "[err] $name: $name.uplugin missing after extraction" >&2; exit 1; }
@@ -226,7 +255,7 @@ install_plugin() {
         exit 1
     fi
 
-    # 5) Update lock file
+    # 4) Update lock file
     ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     tmp="$(mktemp)"
     jq --arg n "$name" --arg v "$version" --arg t "$tag" \

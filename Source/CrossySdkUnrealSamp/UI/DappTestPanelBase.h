@@ -81,7 +81,7 @@ public:
 	FString DefaultChainId = TEXT("eip155:612044");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
-	FString DefaultTxValueWei = TEXT("0x0");
+	FString DefaultTxValueWei = TEXT("0xde0b6b3a7640000");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
 	FString DefaultSignMessage = TEXT("Hello from CROSSx Unreal Sample");

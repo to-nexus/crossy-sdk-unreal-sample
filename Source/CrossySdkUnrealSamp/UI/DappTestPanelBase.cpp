@@ -24,6 +24,23 @@
 #include "Localization/DappLocalizationSubsystem.h"
 
 #include "SDK/CROSSxSdkSubsystem.h"
+#include "Core/Types/CROSSxSdkSettings.h"
+
+
+namespace
+{
+	/**
+	 * Resolves the default CAIP-2 chainId based on the active CROSSx environment.
+	 * - Dev / Stage → CROSS testnet (eip155:612044)
+	 * - Prod        → CROSS mainnet (eip155:612055)
+	 */
+	static FString ResolveDefaultChainId()
+	{
+		const UCROSSxSdkSettings* Settings = GetDefault<UCROSSxSdkSettings>();
+		const ECROSSxEnvironment Env = Settings ? Settings->Environment : ECROSSxEnvironment::Prod;
+		return Env == ECROSSxEnvironment::Prod ? TEXT("eip155:612055") : TEXT("eip155:612044");
+	}
+}
 
 DEFINE_LOG_CATEGORY_STATIC(LogDappPanel, Log, All);
 
@@ -102,7 +119,7 @@ void UDappTestPanelBase::NativeConstruct()
 	// Pre-fill text boxes with sensible defaults so the first-time user can
 	// hit any button without typing anything. All values are harmless on
 	// CROSS testnet.
-	WriteText(Inp_ChainId,        DefaultChainId);
+	WriteText(Inp_ChainId,        (DefaultChainId == TEXT("eip155:612044") || DefaultChainId.IsEmpty()) ? ResolveDefaultChainId() : DefaultChainId);
 	WriteText(Inp_Value,          DefaultTxValueWei);
 	WriteText(Inp_SignMessage,    DefaultSignMessage);
 	WriteText(Inp_TokenDecimals,  DefaultTokenDecimals);
@@ -1441,7 +1458,7 @@ FString UDappTestPanelBase::ResolveFromAddress() const
 
 FString UDappTestPanelBase::ResolveChainId() const
 {
-	FString ChainId = ReadText(Inp_ChainId, DefaultChainId);
+	FString ChainId = ReadText(Inp_ChainId, (DefaultChainId == TEXT("eip155:612044") || DefaultChainId.IsEmpty()) ? ResolveDefaultChainId() : DefaultChainId);
 	return ChainId;
 }
 

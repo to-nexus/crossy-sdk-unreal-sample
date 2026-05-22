@@ -40,17 +40,11 @@ Unreal 에는 Unity UPM 에 해당하는 공식 패키지 매니저가 없어, �
 
 ### 1.2 GitHub Personal Access Token _(선택사항)_
 
-SDK Release 호스팅 레포 (`to-nexus/crossy-sdk-unreal-sample`) 는 프라이빗입니다.
-**Fine-grained PAT** 를 발급하세요:
+기본 SDK Release 호스팅 레포 (`to-nexus/crossy-sdk-unreal-sample`) 는 public 입니다.
+일반적인 외부 개발사는 토큰 없이 `make sdk-install` 만 실행하면 됩니다.
 
-1. GitHub → Settings → Developer settings → **Fine-grained personal access tokens** → _Generate new token_
-2. **Resource owner**: `to-nexus`
-3. **Repository access**: _Only select repositories_ → `to-nexus/crossy-sdk-unreal-sample`
-4. **Repository permissions**: `Contents` → **Read-only**
-5. 생성된 토큰을 다음 중 **한 가지 방법** 으로 주입:
-
-6. GitHub → Settings → Developer settings → **Personal access tokens (classic 또는 fine-grained 중 어느 쪽이든 OK)**
-7. 발급 후 **`.env` 파일에 입력** (권장):
+`crossx-plugins.json` 의 registry 를 private repo 로 바꾼 경우에만 PAT 를 주입하세요.
+발급 후 **`.env` 파일에 입력** 하는 방식을 권장합니다:
 
    ```bash
    cp .env.example .env
@@ -61,7 +55,7 @@ SDK Release 호스팅 레포 (`to-nexus/crossy-sdk-unreal-sample`) 는 프라이
    Makefile 이 `.env` / `.env.local` 를 자동 로드합니다.
    `.env` 는 `.gitignore` 로 차단됩니다.
 
-8. 또는 셸에 export:
+또는 셸에 export:
 
    ```bash
    export GITHUB_TOKEN=github_pat_xxxxxxxx     # macOS / Linux
@@ -88,8 +82,8 @@ make sdk-install
 스크립트가 수행하는 일:
 
 1. `crossx-plugins.json` → `registry.owner/repo` 와 최상위 SDK 버전 읽기
-2. GitHub Releases 에서 태그 `<PluginName>@v<version>` 조회
-3. 자산 `<PluginName>-<version>.zip` 다운로드 + SHA-256 계산
+2. GitHub Releases direct URL 로 자산 `<PluginName>-<version>.zip` 다운로드
+3. SHA-256 계산
 4. `Plugins/<PluginName>/` 아래로 해제
 5. 해제된 `.uplugin` 의 `VersionName` 이 요청 버전과 일치하는지 검증
 6. `.uplugin` 의 `CrossxDependencies` 를 읽어 Webkit 같은 내부 의존 플러그인을 자동 설치

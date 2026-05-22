@@ -62,13 +62,23 @@ make ios-archive         # 동일 + IPA archive -> Saved/Archive/IOS
 ```
 
 `make ios` 가 처음 실행되면 `Intermediate/ProjectFilesIOS/...xcodeproj`
-와 `<프로젝트>.xcworkspace` 가 생성됩니다.
+와 `Intermediate/ProjectFiles/...IOS...xcworkspace` 가 생성됩니다.
 
 ### 2.2 코드 서명
 
-UAT 는 자동 서명이 꺼진 빈 프로파일로 빌드를 시도하므로, **TestFlight /
-App Store 업로드 또는 실기기 인스톨** 단계에서는 **반드시 Xcode 의 Signing
-& Capabilities** 를 사용해야 합니다.
+`make ios` / `make ios-archive` 는 UBT 가 iOS Xcode project 를 다시 만들면서
+Xcode UI 에서 수동으로 고른 Team 값을 덮어쓸 수 있습니다. CLI 빌드에서 사용할
+Apple Developer Team ID 는 `Config/IOS/IOSEngine.ini` 의 `CodeSigningTeam` 과
+`IOSTeamID` 에 기록합니다.
+
+Team ID 는 Xcode 에 보이는 팀 이름이 아니라 10자리 식별자입니다. 로컬 인증서에
+포함된 값을 확인할 수 있습니다:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+수동으로 Signing & Capabilities 를 확인하거나 Archive 를 진행하려면:
 
 ```bash
 make xcode-ios           # 생성된 xcworkspace 또는 IOS xcodeproj 자동 오픈
@@ -198,7 +208,7 @@ DerivedDataCache 는 의도적으로 보존됩니다 (재빌드 가속). 굳이 
 |-----------|---------|
 | `UE_ROOT` | self-hosted 러너의 Unreal 5.7 설치 경로 |
 | `CONFIGURATION` | PR 검증: `Development`. 릴리스: `Shipping` |
-| `GITHUB_TOKEN` | 익명 호출이 rate-limit 에 걸리는 공유 러너에서만 필요 (선택) |
+| `GITHUB_TOKEN` | private SDK registry 를 사용할 때만 필요 (선택) |
 | Android signing | keystore 를 base64 secret 으로 보관 후 step 에서 디코드 |
 | iOS signing | Xcode + fastlane match 권장 (UAT 단독 서명은 비권장) |
 
