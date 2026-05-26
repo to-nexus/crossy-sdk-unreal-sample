@@ -9,8 +9,10 @@ and compiles against the SDK; what remains is editor-side asset creation:
 2. Create the `WBP_DappTestPanel` blueprint that reparents
    `UDappTestPanelBase` and names its sub-widgets to match the C++ contract
 3. Place the `ADappActor` and the panel widget in the startup map
-4. (Optional) Create a themed notification widget that listens to
-   `UDappNotificationSubsystem::OnNotification`
+4. (Optional) Re-skin the built-in toast host by subclassing
+   `UDappNotificationHostWidget` — the C++ default is auto-attached and
+   surfaces every `UDappNotificationSubsystem::OnNotification` broadcast
+   as an on-screen toast out of the box.
 
 External dApp teams that duplicate this project only need to:
 
@@ -200,6 +202,7 @@ conventional path) **without** subclassing in Blueprint:
 TestPanelWidgetClass=/Game/UI/WBP_DappTestPanel.WBP_DappTestPanel_C
 bAutoSpawnDappActor=True
 bAutoCreateTestPanel=True
+bAutoCreateNotificationHost=True
 bAutoEnableUIInputMode=True
 ```
 
@@ -211,18 +214,43 @@ spawn step if it finds one already there.
 
 ---
 
-## 4. (Optional) Notification widget
+## 4. Notification host widget
 
-`UDappNotificationSubsystem` is broadcast-only. To visualize toasts:
+`UDappNotificationSubsystem` is broadcast-only. The sample ships a small
+C++ renderer — `UDappNotificationHostWidget` — that `ADappGameMode`
+instantiates and adds to the viewport (ZOrder 100) at level start, so toasts
+work without any editor authoring. The host itself is `SelfHitTestInvisible`
+and never intercepts clicks destined for the test panel.
 
-1. Create `WBP_DappToast` (simple Border + TextBlock + fade animation).
-2. Create `WBP_DappToastHost` that subscribes to
-   `UDappNotificationSubsystem::OnNotification` in `Event Construct` and
-   spawns a new `WBP_DappToast` for each broadcast.
-3. Add `WBP_DappToastHost` to the viewport alongside `WBP_DappTestPanel`.
+### Default behavior (no setup required)
 
-The sample intentionally omits this so external teams can keep their own
-notification visuals; you can use any existing toast widget you already own.
+- Toasts stack from the bottom-center of the screen with a fixed 16/40px
+  inset that also clears mobile safe-area gestures.
+- Each toast lives for `DefaultDurationSeconds` (6 s by default) unless the
+  broadcast carries an explicit `DurationSeconds`.
+- Severity-tinted `UBorder` background (info / success / warning / error).
+- Auto-wrapped multi-line `UTextBlock` — important for the CROSS Pay result
+  message that includes line breaks.
+- Hard cap (`MaxVisibleToasts`, default 5); the oldest entry is evicted
+  when the cap is reached.
+
+### Re-skinning via Blueprint
+
+1. Create `WBP_DappNotificationHost`, reparent to
+   `UDappNotificationHostWidget`.
+2. Author whatever layout you like — anchored toasts, fade animations,
+   custom borders, etc.
+3. Add a `UVerticalBox` named **`Box_Toasts`** somewhere in the tree (this
+   is a `BindWidgetOptional`). When the C++ base sees a non-null
+   `Box_Toasts`, it skips its auto-built layout and appends toast cards
+   into your container instead.
+4. Point `ADappGameMode → NotificationHostWidgetClass` at your BP (either
+   in the BP_DappGameMode defaults or via `DefaultGame.ini`).
+
+If you want to disable the host entirely (e.g. because you wire toasts
+through your own HUD), set `bAutoCreateNotificationHost = False` on the
+GameMode. The subsystem keeps logging to `LogDappNotification` in that case,
+so headless / automated runs still see every message.
 
 ---
 

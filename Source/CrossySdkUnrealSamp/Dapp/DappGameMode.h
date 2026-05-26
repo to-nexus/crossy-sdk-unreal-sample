@@ -5,6 +5,7 @@
 #include "DappGameMode.generated.h"
 
 class ADappActor;
+class UDappNotificationHostWidget;
 class UUserWidget;
 
 /**
@@ -49,11 +50,25 @@ public:
 		meta = (MetaClass = "/Script/UMG.UserWidget", AllowedClasses = "/Script/UMG.UserWidget"))
 	TSoftClassPtr<UUserWidget> TestPanelWidgetClass;
 
+	/**
+	 * On-screen notification host. Defaults to the C++ base class which builds
+	 * a programmatic toast layout — no WBP authoring required. Override with a
+	 * BP subclass to customise visuals (see UDappNotificationHostWidget).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Dapp")
+	TSubclassOf<UDappNotificationHostWidget> NotificationHostWidgetClass;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Dapp")
 	bool bAutoSpawnDappActor = true;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Dapp")
 	bool bAutoCreateTestPanel = true;
+
+	/** When true, instantiates NotificationHostWidgetClass and adds it to the
+	 *  viewport above the test panel so UDappNotificationSubsystem broadcasts
+	 *  surface as on-screen toasts. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Dapp")
+	bool bAutoCreateNotificationHost = true;
 
 	/** When true, switches input mode to Game-and-UI and shows the cursor. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Dapp")
@@ -65,4 +80,5 @@ protected:
 private:
 	void EnsureDappActor();
 	void CreateTestPanelWidget();
+	void CreateNotificationHostWidget();
 };

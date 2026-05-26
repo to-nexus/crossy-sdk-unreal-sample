@@ -25,6 +25,25 @@ namespace
 		default:            return Row.KO;
 		}
 	}
+
+	// CSV-imported FText rows preserve "\n" / "\t" / "\r" as literal two-character
+	// escape sequences; FText::Format does not interpret them. Convert here so
+	// UI consumers (and on-screen notifications in particular) see real newlines
+	// instead of the raw backslash-n that previously showed up in LogDappNotification.
+	FText UnescapeStringLiterals(const FText& In)
+	{
+		const FString Source = In.ToString();
+		if (Source.IsEmpty() || Source.Find(TEXT("\\")) == INDEX_NONE)
+		{
+			return In;
+		}
+		FString Out = Source;
+		Out.ReplaceInline(TEXT("\\r\\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		Out.ReplaceInline(TEXT("\\n"), TEXT("\n"), ESearchCase::CaseSensitive);
+		Out.ReplaceInline(TEXT("\\r"), TEXT("\n"), ESearchCase::CaseSensitive);
+		Out.ReplaceInline(TEXT("\\t"), TEXT("\t"), ESearchCase::CaseSensitive);
+		return FText::FromString(MoveTemp(Out));
+	}
 }
 
 UDappLocalizationSubsystem* UDappLocalizationSubsystem::Get(const UObject* WorldContext)
@@ -76,7 +95,7 @@ FText UDappLocalizationSubsystem::GetText(FName Key) const
 			const FText& Text = ResolveText(*Row, CurrentLang);
 			if (!Text.IsEmpty())
 			{
-				return Text;
+				return UnescapeStringLiterals(Text);
 			}
 		}
 	}

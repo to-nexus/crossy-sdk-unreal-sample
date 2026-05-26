@@ -1,6 +1,7 @@
 #include "Dapp/DappGameMode.h"
 
 #include "Dapp/DappActor.h"
+#include "UI/DappNotificationHostWidget.h"
 
 #include "Blueprint/UserWidget.h"
 #include "Engine/World.h"
@@ -17,6 +18,11 @@ ADappGameMode::ADappGameMode()
 	// of changing C++.
 	TestPanelWidgetClass = TSoftClassPtr<UUserWidget>(
 		FSoftObjectPath(TEXT("/Game/UI/WBP_DappTestPanel.WBP_DappTestPanel_C")));
+
+	// Default to the C++ host so notifications work out of the box without
+	// an authored WBP asset. Projects wanting bespoke visuals just point this
+	// at their own UUserWidget subclass.
+	NotificationHostWidgetClass = UDappNotificationHostWidget::StaticClass();
 }
 
 void ADappGameMode::BeginPlay()
@@ -31,6 +37,11 @@ void ADappGameMode::BeginPlay()
 	if (bAutoCreateTestPanel)
 	{
 		CreateTestPanelWidget();
+	}
+
+	if (bAutoCreateNotificationHost)
+	{
+		CreateNotificationHostWidget();
 	}
 }
 
@@ -119,4 +130,43 @@ void ADappGameMode::CreateTestPanelWidget()
 
 	UE_LOG(LogDappGameMode, Log,
 		TEXT("Test panel widget '%s' added to viewport."), *Widget->GetName());
+}
+
+void ADappGameMode::CreateNotificationHostWidget()
+{
+	UWorld* World = GetWorld();
+	if (!World) { return; }
+
+	APlayerController* PC = World->GetFirstPlayerController();
+	if (!PC)
+	{
+		UE_LOG(LogDappGameMode, Warning,
+			TEXT("No PlayerController available yet — skipping notification host creation."));
+		return;
+	}
+
+	UClass* HostClass = NotificationHostWidgetClass
+		? NotificationHostWidgetClass.Get()
+		: UDappNotificationHostWidget::StaticClass();
+	if (!HostClass)
+	{
+		UE_LOG(LogDappGameMode, Warning,
+			TEXT("NotificationHostWidgetClass is unset — skipping notification host creation."));
+		return;
+	}
+
+	UDappNotificationHostWidget* Host = CreateWidget<UDappNotificationHostWidget>(PC, HostClass);
+	if (!Host)
+	{
+		UE_LOG(LogDappGameMode, Error, TEXT("CreateWidget returned null for notification host %s."),
+			*GetNameSafe(HostClass));
+		return;
+	}
+
+	// ZOrder above the test panel (default = 0) so toasts always float on top.
+	// The widget itself is SelfHitTestInvisible so this never steals clicks.
+	Host->AddToViewport(/*ZOrder=*/100);
+
+	UE_LOG(LogDappGameMode, Log,
+		TEXT("Notification host widget '%s' added to viewport."), *Host->GetName());
 }
