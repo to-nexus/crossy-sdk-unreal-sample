@@ -1033,11 +1033,28 @@ void UDappTestPanelBase::OnClickUseWebkit()
 
 void UDappTestPanelBase::OnClickUseCrossPay()
 {
+	// Re-entry guard: each click creates a new PG checkout, so spamming
+	// the button without a guard fires N concurrent flows. The SDK now
+	// routes callbacks per-state (so the right checkout's result wins)
+	// but starting N parallel checkouts is still wasteful and confusing
+	// to the user — keep it strictly serialized at the dApp layer.
+	if (bCrossPayInFlight)
+	{
+		UE_LOG(LogDappPanel, Log, TEXT("OnClickUseCrossPay: ignored — a CROSS Pay flow is already in flight."));
+		return;
+	}
+
 	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
 	if (!Sdk)
 	{
 		NotifyError(TEXT("sample.sdk.notReady"), {});
 		return;
+	}
+
+	bCrossPayInFlight = true;
+	if (Btn_UseCrossPay)
+	{
+		Btn_UseCrossPay->SetIsEnabled(false);
 	}
 
 	SetStatus(TEXT("sample.status.openingCrossPay"));
@@ -1081,6 +1098,12 @@ void UDappTestPanelBase::HandleCrossPayCheckoutUrlResult(const FCROSSxCrossPayCh
 
 void UDappTestPanelBase::HandleCrossPayPaymentResult(const FCROSSxCrossPayPaymentResult& Result)
 {
+	bCrossPayInFlight = false;
+	if (Btn_UseCrossPay)
+	{
+		Btn_UseCrossPay->SetIsEnabled(true);
+	}
+
 	if (!Result.bSuccess)
 	{
 		NotifyArgs(TEXT("sample.crossPay.failed"), { { TEXT("message"), Result.ErrorMessage } });
