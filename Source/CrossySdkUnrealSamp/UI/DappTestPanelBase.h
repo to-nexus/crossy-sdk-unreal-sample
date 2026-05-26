@@ -95,6 +95,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
 	FString DefaultTokenDecimals = TEXT("18");
 
+	// Default decimal amount pre-filled into Inp_TokenAmount so the Send
+	// Token button works without typing as long as the user has supplied a
+	// contract + recipient. ERC-20 transfer encoding scales this by 10^Decimals
+	// via DappErc20Codec::EncodeTransfer.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
+	FString DefaultTokenAmount = TEXT("1");
+
 	// Minimal EIP-712 typed-data payload that's safe to sign on any EVM
 	// chain (no on-chain effect; pure off-chain signature for testing).
 	// Without a default, OnClickSignTypedData() short-circuits with

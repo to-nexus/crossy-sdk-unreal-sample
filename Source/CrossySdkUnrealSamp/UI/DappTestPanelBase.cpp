@@ -46,6 +46,12 @@ namespace
 
 DEFINE_LOG_CATEGORY_STATIC(LogDappPanel, Log, All);
 
+// Forward-declared so the token-balance / send-token handlers (defined
+// earlier in the file) can name their missing fields via the same lookup
+// helper used by the label-injection code. The full definition lives
+// alongside the other label utilities below.
+namespace { FText InputLabelOrFallback(UDappLocalizationSubsystem* Loc, FName Key, const FString& FallbackEN); }
+
 namespace
 {
 	FCROSSxCrossPayCreatePaymentRequest BuildCrossPayPaymentRequest()
@@ -130,6 +136,7 @@ void UDappTestPanelBase::NativeConstruct()
 	WriteText(Inp_Value,          DefaultTxValueWei);
 	WriteText(Inp_SignMessage,    DefaultSignMessage);
 	WriteText(Inp_TokenDecimals,  DefaultTokenDecimals);
+	WriteText(Inp_TokenAmount,    DefaultTokenAmount);
 
 	// Wire up DappActor signals — the actor itself is placed in the level,
 	// so we do not assume any particular ordering. If it is not yet present
@@ -726,7 +733,13 @@ void UDappTestPanelBase::OnClickGetTokenBalance()
 	}
 	if (Contract.IsEmpty())
 	{
-		NotifyError(TEXT("sample.token.invalidInput"), {});
+		// Surface the exact missing field name so the developer knows what
+		// to type into the panel — a generic "input invalid" toast forced
+		// them to re-read the C++ to figure out which slot was blank.
+		const TMap<FString, FString> Args = {
+			{ TEXT("fields"), InputLabelOrFallback(ResolveLoc(), TEXT("sample.input.tokenContract"), TEXT("Token Contract")).ToString() }
+		};
+		NotifyError(TEXT("sample.token.invalidInput"), Args);
 		return;
 	}
 
@@ -795,7 +808,18 @@ void UDappTestPanelBase::OnClickSendToken()
 	}
 	if (Contract.IsEmpty() || To.IsEmpty() || Amount.IsEmpty())
 	{
-		NotifyError(TEXT("sample.token.invalidInput"), {});
+		// Collect *which* slots are blank — without this the toast just
+		// says "input invalid" and a first-time dev has no way to tell
+		// whether they forgot the contract, the recipient, or the amount.
+		UDappLocalizationSubsystem* Loc = ResolveLoc();
+		TArray<FString> Missing;
+		if (Contract.IsEmpty()) { Missing.Add(InputLabelOrFallback(Loc, TEXT("sample.input.tokenContract"), TEXT("Token Contract")).ToString()); }
+		if (To.IsEmpty())       { Missing.Add(InputLabelOrFallback(Loc, TEXT("sample.input.tokenTo"),       TEXT("Token Recipient")).ToString()); }
+		if (Amount.IsEmpty())   { Missing.Add(InputLabelOrFallback(Loc, TEXT("sample.input.tokenAmount"),   TEXT("Token Amount")).ToString()); }
+		const TMap<FString, FString> Args = {
+			{ TEXT("fields"), FString::Join(Missing, TEXT(", ")) }
+		};
+		NotifyError(TEXT("sample.token.invalidInput"), Args);
 		return;
 	}
 
