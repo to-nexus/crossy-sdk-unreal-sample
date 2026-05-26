@@ -1031,30 +1031,21 @@ void UDappTestPanelBase::OnClickUseWebkit()
 	Sdk->OpenWebView(Url, Delegate);
 }
 
+// Each click intentionally starts an independent CROSS Pay flow. The
+// SDK routes callbacks per-state via FCROSSxNativeDeepLinkAdapter::
+// CrossPayWaiters, so N concurrent clicks resolve into N independent
+// payment results — each checkout id surfaces via its own
+// HandleCrossPayPaymentResult call. There is no re-entry guard here on
+// purpose; gating this at the dApp would make the SDK's multi-waiter
+// routing untestable and contradicts the expectation that every
+// checkout returns its own callback.
 void UDappTestPanelBase::OnClickUseCrossPay()
 {
-	// Re-entry guard: each click creates a new PG checkout, so spamming
-	// the button without a guard fires N concurrent flows. The SDK now
-	// routes callbacks per-state (so the right checkout's result wins)
-	// but starting N parallel checkouts is still wasteful and confusing
-	// to the user — keep it strictly serialized at the dApp layer.
-	if (bCrossPayInFlight)
-	{
-		UE_LOG(LogDappPanel, Log, TEXT("OnClickUseCrossPay: ignored — a CROSS Pay flow is already in flight."));
-		return;
-	}
-
 	UCROSSxSdkSubsystem* Sdk = ResolveSdk();
 	if (!Sdk)
 	{
 		NotifyError(TEXT("sample.sdk.notReady"), {});
 		return;
-	}
-
-	bCrossPayInFlight = true;
-	if (Btn_UseCrossPay)
-	{
-		Btn_UseCrossPay->SetIsEnabled(false);
 	}
 
 	SetStatus(TEXT("sample.status.openingCrossPay"));
@@ -1098,12 +1089,6 @@ void UDappTestPanelBase::HandleCrossPayCheckoutUrlResult(const FCROSSxCrossPayCh
 
 void UDappTestPanelBase::HandleCrossPayPaymentResult(const FCROSSxCrossPayPaymentResult& Result)
 {
-	bCrossPayInFlight = false;
-	if (Btn_UseCrossPay)
-	{
-		Btn_UseCrossPay->SetIsEnabled(true);
-	}
-
 	if (!Result.bSuccess)
 	{
 		NotifyArgs(TEXT("sample.crossPay.failed"), { { TEXT("message"), Result.ErrorMessage } });

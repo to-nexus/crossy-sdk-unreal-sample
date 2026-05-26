@@ -273,15 +273,6 @@ private:
 	// success/failure. See OnClickSignPersonalMessage etc. for callers.
 	UPROPERTY(Transient) EPendingWalletAction PendingWalletAction = EPendingWalletAction::None;
 
-	// Re-entry guard for "Use CROSS Pay". Each click creates a brand new
-	// checkout on the PG, so without a guard the user can spawn N
-	// concurrent flows by spamming the button. Only one of those would
-	// actually be paid, and (depending on PG callback routing) the dApp
-	// could surface a stale PENDING result for one of the others. We
-	// disable the button while a flow is in flight and re-enable it from
-	// HandleCrossPayPaymentResult / HandleCrossPayWebViewResult.
-	UPROPERTY(Transient) bool bCrossPayInFlight = false;
-
 	// Mobile drag-fallback bookkeeping (see NativeOnPreviewMouseButtonDown
 	// / NativeOnTouch* implementations).
 	bool       bMobileDragActive    = false;
