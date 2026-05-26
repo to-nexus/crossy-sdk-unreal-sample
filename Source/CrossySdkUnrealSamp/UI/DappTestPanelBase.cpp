@@ -8,6 +8,7 @@
 #include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
@@ -25,6 +26,7 @@
 
 #include "SDK/CROSSxSdkSubsystem.h"
 #include "Core/Types/CROSSxSdkSettings.h"
+#include "Core/Utils/CROSSxChainUtils.h"
 
 
 namespace
@@ -115,6 +117,11 @@ void UDappTestPanelBase::NativeConstruct()
 	}
 
 	BindAllClickHandlers();
+
+	// Inject "Chain ID" / "To" / "Value" / ... titles above each Inp_*
+	// widget so the dApp UI is self-describing without forcing every WBP
+	// downstream of this base to hand-author label TextBlocks.
+	EnsureInputLabelsBuilt();
 
 	// Pre-fill text boxes with sensible defaults so the first-time user can
 	// hit any button without typing anything. All values are harmless on
@@ -612,7 +619,7 @@ void UDappTestPanelBase::OnClickSignTx()
 	Tx.ChainId = ResolveChainId();
 	Tx.From    = ResolveFromAddress();
 	Tx.To      = ReadText(Inp_To);
-	Tx.Value   = ReadText(Inp_Value, DefaultTxValueWei);
+	Tx.Value   = ResolveTxValueAsHexWei();
 	Tx.Data    = ReadText(Inp_Data);
 	// Empty data fields must be normalized to "0x" — some chains/RPCs
 	// reject the unsigned tx envelope when `data` is the empty string.
@@ -661,7 +668,7 @@ void UDappTestPanelBase::OnClickSendTx()
 	Tx.ChainId = ResolveChainId();
 	Tx.From    = ResolveFromAddress();
 	Tx.To      = ReadText(Inp_To);
-	Tx.Value   = ReadText(Inp_Value, DefaultTxValueWei);
+	Tx.Value   = ResolveTxValueAsHexWei();
 	Tx.Data    = ReadText(Inp_Data);
 	if (Tx.Data.IsEmpty()) { Tx.Data = TEXT("0x"); }
 
@@ -1293,6 +1300,12 @@ void UDappTestPanelBase::RefreshLocalizedLabels()
 		// Btn_ToggleLanguage label is handled by HandleLanguageChanged
 		// (always shows the *current* language code, not a translated word).
 
+		// Input titles ("Chain ID", "Value", "Data (hex)", ...) follow the
+		// same language toggle as the buttons. We refresh by FName so the
+		// C++ fallback strings stay in lockstep with whatever the user (or
+		// translator) wires into DT_DappStrings.
+		RefreshInputLabels();
+
 		// Hand off to BP — designers can override OnRefreshLocalizedLabels to
 		// localize bespoke widgets the C++ base can't see.
 		OnRefreshLocalizedLabels(Loc->GetLanguage());
@@ -1370,6 +1383,115 @@ void UDappTestPanelBase::WriteText(UEditableTextBox* Box, const FString& Text)
 void UDappTestPanelBase::WriteLabel(UTextBlock* Block, const FText& Text)
 {
 	if (Block) { Block->SetText(Text); }
+}
+
+FString UDappTestPanelBase::ResolveTxValueAsHexWei() const
+{
+	const FString Raw = ReadText(Inp_Value, DefaultTxValueWei);
+
+	bool bOk = false;
+	const FString HexWei = FCROSSxChainUtils::DecimalToHexWei(Raw, 18, &bOk);
+
+	if (bOk && !HexWei.IsEmpty())
+	{
+		return HexWei;
+	}
+
+	// Falling back here means the user typed something we couldn't parse
+	// (negative, letters, garbage). Forward the raw string so the SDK's
+	// own normalize-quantity pass still produces a clear "invalid prepare
+	// params" / warning trail rather than silently zero-ing the tx.
+	UE_LOG(LogDappPanel, Warning,
+		TEXT("[Dapp] Inp_Value=\"%s\" is not a valid decimal or hex amount; forwarding as-is."),
+		*Raw);
+	return Raw;
+}
+
+namespace
+{
+	FText InputLabelOrFallback(UDappLocalizationSubsystem* Loc, FName Key, const FString& FallbackEN)
+	{
+		if (Loc)
+		{
+			const FText Translated = Loc->GetText(Key);
+			// UDappLocalizationSubsystem::GetText returns "<missing:key>"
+			// when the row is absent (e.g. CSV not re-imported yet). Detect
+			// that marker so we can show readable copy until the asset is
+			// updated.
+			if (!Translated.ToString().StartsWith(TEXT("<missing:")))
+			{
+				return Translated;
+			}
+		}
+		return FText::FromString(FallbackEN);
+	}
+}
+
+void UDappTestPanelBase::InsertInputLabel(UWidget* Anchor, FName LocKey, const FString& FallbackEN)
+{
+	if (!Anchor) { return; }
+	UPanelWidget* Parent = Anchor->GetParent();
+	if (!Parent) { return; }
+	const int32 Index = Parent->GetChildIndex(Anchor);
+	if (Index < 0) { return; }
+
+	UTextBlock* Label = NewObject<UTextBlock>(this);
+	if (!Label) { return; }
+
+	const FText LabelText = InputLabelOrFallback(ResolveLoc(), LocKey, FallbackEN);
+	Label->SetText(LabelText);
+
+	// Compact accent header — small, slightly muted teal to match the rest
+	// of the panel without competing visually with the value text.
+	FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 11);
+	Label->SetFont(Font);
+	Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.85f, 0.85f, 1.f)));
+
+	UPanelSlot* NewSlot = Parent->InsertChildAt(Index, Label);
+	if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(NewSlot))
+	{
+		VBSlot->SetPadding(FMargin(2.f, 6.f, 2.f, 2.f));
+	}
+
+	FInputLabelBinding Binding;
+	Binding.Label       = Label;
+	Binding.LocKey      = LocKey;
+	Binding.FallbackEN  = FallbackEN;
+	InputLabels.Add(Binding);
+}
+
+void UDappTestPanelBase::EnsureInputLabelsBuilt()
+{
+	if (bInputLabelsBuilt) { return; }
+	bInputLabelsBuilt = true;
+
+	// One entry per Inp_* widget the C++ base knows about. WBPs that omit
+	// an input simply skip its label too (InsertInputLabel early-outs on
+	// null anchors).
+	InsertInputLabel(Inp_ChainId,        TEXT("sample.input.chainId"),        TEXT("Chain ID"));
+	InsertInputLabel(Inp_From,           TEXT("sample.input.from"),           TEXT("From"));
+	InsertInputLabel(Inp_To,             TEXT("sample.input.to"),             TEXT("To"));
+	InsertInputLabel(Inp_Value,          TEXT("sample.input.value"),          TEXT("Value (decimal, e.g. 1 = 1 CROSS)"));
+	InsertInputLabel(Inp_Data,           TEXT("sample.input.data"),           TEXT("Data (hex)"));
+	InsertInputLabel(Inp_TokenContract,  TEXT("sample.input.tokenContract"),  TEXT("Token Contract"));
+	InsertInputLabel(Inp_TokenTo,        TEXT("sample.input.tokenTo"),        TEXT("Token Recipient"));
+	InsertInputLabel(Inp_TokenAmount,    TEXT("sample.input.tokenAmount"),    TEXT("Token Amount (decimal)"));
+	InsertInputLabel(Inp_TokenDecimals,  TEXT("sample.input.tokenDecimals"),  TEXT("Token Decimals"));
+	InsertInputLabel(Inp_SignMessage,    TEXT("sample.input.signMessage"),    TEXT("Message to Sign"));
+	InsertInputLabel(Inp_SignTypedData,  TEXT("sample.input.signTypedData"),  TEXT("EIP-712 Typed Data (JSON)"));
+	InsertInputLabel(Inp_WebkitUrl,      TEXT("sample.input.webkitUrl"),      TEXT("Webkit URL"));
+}
+
+void UDappTestPanelBase::RefreshInputLabels()
+{
+	UDappLocalizationSubsystem* Loc = ResolveLoc();
+	for (const FInputLabelBinding& Binding : InputLabels)
+	{
+		if (UTextBlock* Block = Binding.Label.Get())
+		{
+			Block->SetText(InputLabelOrFallback(Loc, Binding.LocKey, Binding.FallbackEN));
+		}
+	}
 }
 
 void UDappTestPanelBase::SetStatus(FName Key)

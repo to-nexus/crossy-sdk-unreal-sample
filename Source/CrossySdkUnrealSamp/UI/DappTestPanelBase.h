@@ -80,8 +80,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
 	FString DefaultChainId = TEXT("eip155:612044");
 
+	// Default value pre-filled into Inp_Value when no other text is set.
+	// Interpreted as a decimal native-coin amount (e.g. "1" = 1 ETH / 1
+	// CROSS); the sample converts it into a canonical wei hex quantity via
+	// ResolveTxValueAsHexWei() right before any Sign/Send call. Raw
+	// "0x"-prefixed wei hex is still accepted as an escape hatch for power
+	// users who want byte-level control.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
-	FString DefaultTxValueWei = TEXT("0xde0b6b3a7640000");
+	FString DefaultTxValueWei = TEXT("1");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
 	FString DefaultSignMessage = TEXT("Hello from CROSSx Unreal Sample");
@@ -235,6 +241,31 @@ private:
 	FString  ReadText(UMultiLineEditableTextBox* Box, const FString& Fallback = FString()) const;
 	void     WriteText(UEditableTextBox* Box, const FString& Text);
 	void     WriteLabel(UTextBlock* Block, const FText& Text);
+
+	// Reads the value text box and resolves it into a canonical EIP-1474
+	// wei hex quantity. Accepts human-friendly decimals like "1" / "0.5"
+	// (interpreted as ETH-scale, i.e. 18 fractional digits) as well as raw
+	// "0x"-prefixed wei for power users. Falls back to DefaultTxValueWei
+	// (parsed the same way) when the field is empty.
+	FString  ResolveTxValueAsHexWei() const;
+
+	// Programmatic input labels — without these the inputs render as a
+	// stack of values with no titles, which makes the dApp harder to
+	// learn. We can't drive the labels from the WBP without forcing every
+	// downstream sample to re-author the asset, so we inject UTextBlocks
+	// in front of each Inp_* widget at runtime and refresh their text
+	// whenever the dApp language changes.
+	void     EnsureInputLabelsBuilt();
+	void     RefreshInputLabels();
+	void     InsertInputLabel(UWidget* Anchor, FName LocKey, const FString& FallbackEN);
+	struct FInputLabelBinding
+	{
+		TWeakObjectPtr<UTextBlock> Label;
+		FName   LocKey;
+		FString FallbackEN;
+	};
+	TArray<FInputLabelBinding> InputLabels;
+	bool bInputLabelsBuilt = false;
 	void     SetStatus(FName Key);
 	void     SetStatusArgs(FName Key, const TMap<FString, FString>& Args);
 	void     SetStatusText(const FText& Text);
