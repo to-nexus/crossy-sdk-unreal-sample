@@ -8,6 +8,7 @@
 #include "Components/PanelWidget.h"
 #include "Components/ScrollBox.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -137,6 +138,21 @@ void UDappTestPanelBase::NativeConstruct()
 	WriteText(Inp_SignMessage,    DefaultSignMessage);
 	WriteText(Inp_TokenDecimals,  DefaultTokenDecimals);
 	WriteText(Inp_TokenAmount,    DefaultTokenAmount);
+
+	// Patch DefaultTypedDataJson so domain.chainId matches the active
+	// environment. The constructor hard-codes 612044 (testnet) as a safe
+	// placeholder; replace it with the resolved chain number so the SDK's
+	// TypedData validation doesn't reject the default payload on mainnet.
+	{
+		const FString ActiveChain = ResolveDefaultChainId();
+		static const FString Eip155Prefix = TEXT("eip155:");
+		if (ActiveChain.StartsWith(Eip155Prefix))
+		{
+			const FString ActiveNumeric = ActiveChain.Mid(Eip155Prefix.Len());
+			DefaultTypedDataJson = DefaultTypedDataJson.Replace(TEXT("612044"), *ActiveNumeric);
+		}
+	}
+	WriteText(Inp_SignTypedData,  DefaultTypedDataJson);
 
 	// Wire up DappActor signals — the actor itself is placed in the level,
 	// so we do not assume any particular ordering. If it is not yet present
@@ -1404,6 +1420,12 @@ void UDappTestPanelBase::WriteText(UEditableTextBox* Box, const FString& Text)
 	Box->SetText(FText::FromString(Text));
 }
 
+void UDappTestPanelBase::WriteText(UMultiLineEditableTextBox* Box, const FString& Text)
+{
+	if (!Box) { return; }
+	Box->SetText(FText::FromString(Text));
+}
+
 void UDappTestPanelBase::WriteLabel(UTextBlock* Block, const FText& Text)
 {
 	if (Block) { Block->SetText(Text); }
@@ -1454,10 +1476,7 @@ namespace
 void UDappTestPanelBase::InsertInputLabel(UWidget* Anchor, FName LocKey, const FString& FallbackEN)
 {
 	if (!Anchor) { return; }
-	UPanelWidget* Parent = Anchor->GetParent();
-	if (!Parent) { return; }
-	const int32 Index = Parent->GetChildIndex(Anchor);
-	if (Index < 0) { return; }
+	if (!Anchor->GetParent()) { return; }
 
 	UTextBlock* Label = NewObject<UTextBlock>(this);
 	if (!Label) { return; }
@@ -1465,19 +1484,15 @@ void UDappTestPanelBase::InsertInputLabel(UWidget* Anchor, FName LocKey, const F
 	const FText LabelText = InputLabelOrFallback(ResolveLoc(), LocKey, FallbackEN);
 	Label->SetText(LabelText);
 
-	// Compact accent header — small, slightly muted teal to match the rest
-	// of the panel without competing visually with the value text.
 	FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 11);
 	Label->SetFont(Font);
 	Label->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.85f, 0.85f, 1.f)));
 
-	UPanelSlot* NewSlot = Parent->InsertChildAt(Index, Label);
-	if (UVerticalBoxSlot* VBSlot = Cast<UVerticalBoxSlot>(NewSlot))
-	{
-		VBSlot->SetPadding(FMargin(2.f, 6.f, 2.f, 2.f));
-	}
-
+	// Defer actual insertion — RebuildParentVerticalBoxes() reorders
+	// all children at once after every label is registered. Using
+	// InsertChildAt() per-label causes UMG to append instead of insert.
 	FInputLabelBinding Binding;
+	Binding.Anchor      = Anchor;
 	Binding.Label       = Label;
 	Binding.LocKey      = LocKey;
 	Binding.FallbackEN  = FallbackEN;
@@ -1504,6 +1519,79 @@ void UDappTestPanelBase::EnsureInputLabelsBuilt()
 	InsertInputLabel(Inp_SignMessage,    TEXT("sample.input.signMessage"),    TEXT("Message to Sign"));
 	InsertInputLabel(Inp_SignTypedData,  TEXT("sample.input.signTypedData"),  TEXT("EIP-712 Typed Data (JSON)"));
 	InsertInputLabel(Inp_WebkitUrl,      TEXT("sample.input.webkitUrl"),      TEXT("Webkit URL"));
+
+	// Actually place every label before its anchor in the parent VerticalBox.
+	// InsertChildAt() appends rather than inserting in UMG, so we rebuild
+	// each affected VerticalBox's child order in one pass here.
+	RebuildParentVerticalBoxes();
+}
+
+void UDappTestPanelBase::RebuildParentVerticalBoxes()
+{
+	// Build a map: VerticalBox → { anchor → label } so we process each VBox once.
+	TMap<UVerticalBox*, TMap<UWidget*, UTextBlock*>> VBoxMap;
+	for (const FInputLabelBinding& B : InputLabels)
+	{
+		UWidget*    Anchor = B.Anchor.Get();
+		UTextBlock* Label  = B.Label.Get();
+		if (!Anchor || !Label) { continue; }
+		UVerticalBox* VBox = Cast<UVerticalBox>(Anchor->GetParent());
+		if (!VBox) { continue; }
+		VBoxMap.FindOrAdd(VBox).Add(Anchor, Label);
+	}
+
+	for (auto& [VBox, AnchorToLabel] : VBoxMap)
+	{
+		// Snapshot every child with its slot properties before clearing.
+		struct FChildSnap
+		{
+			UWidget*             Widget;
+			FMargin              Padding;
+			EHorizontalAlignment HAlign  = HAlign_Fill;
+			EVerticalAlignment   VAlign  = VAlign_Fill;
+			FSlateChildSize      Size    = FSlateChildSize(ESlateSizeRule::Automatic);
+			bool                 bHasSlot = false;
+		};
+		TArray<FChildSnap> Snaps;
+		for (int32 i = 0; i < VBox->GetChildrenCount(); i++)
+		{
+			UWidget* Child = VBox->GetChildAt(i);
+			FChildSnap S;
+			S.Widget = Child;
+			if (UVerticalBoxSlot* Slot = Cast<UVerticalBoxSlot>(Child->Slot))
+			{
+				S.Padding   = Slot->GetPadding();
+				S.HAlign    = Slot->GetHorizontalAlignment();
+				S.VAlign    = Slot->GetVerticalAlignment();
+				S.Size      = Slot->GetSize();
+				S.bHasSlot  = true;
+			}
+			Snaps.Add(MoveTemp(S));
+		}
+
+		VBox->ClearChildren();
+
+		for (const FChildSnap& S : Snaps)
+		{
+			// If this child is an anchor, prepend its label first.
+			if (UTextBlock** LabelPtr = AnchorToLabel.Find(S.Widget))
+			{
+				if (UVerticalBoxSlot* LSlot = VBox->AddChildToVerticalBox(*LabelPtr))
+					LSlot->SetPadding(FMargin(2.f, 6.f, 2.f, 2.f));
+			}
+
+			if (UVerticalBoxSlot* NewSlot = VBox->AddChildToVerticalBox(S.Widget))
+			{
+				if (S.bHasSlot)
+				{
+					NewSlot->SetPadding(S.Padding);
+					NewSlot->SetHorizontalAlignment(S.HAlign);
+					NewSlot->SetVerticalAlignment(S.VAlign);
+					NewSlot->SetSize(S.Size);
+				}
+			}
+		}
+	}
 }
 
 void UDappTestPanelBase::RefreshInputLabels()

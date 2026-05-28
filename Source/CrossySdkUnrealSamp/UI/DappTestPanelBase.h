@@ -13,6 +13,7 @@ class UEditableTextBox;
 class UMultiLineEditableTextBox;
 class UPanelWidget;
 class UScrollBox;
+class UVerticalBox;
 
 class ADappActor;
 class UDappLocalizationSubsystem;
@@ -247,6 +248,7 @@ private:
 	FString  ReadText(UEditableTextBox* Box, const FString& Fallback = FString()) const;
 	FString  ReadText(UMultiLineEditableTextBox* Box, const FString& Fallback = FString()) const;
 	void     WriteText(UEditableTextBox* Box, const FString& Text);
+	void     WriteText(UMultiLineEditableTextBox* Box, const FString& Text);
 	void     WriteLabel(UTextBlock* Block, const FText& Text);
 
 	// Reads the value text box and resolves it into a canonical EIP-1474
@@ -265,8 +267,10 @@ private:
 	void     EnsureInputLabelsBuilt();
 	void     RefreshInputLabels();
 	void     InsertInputLabel(UWidget* Anchor, FName LocKey, const FString& FallbackEN);
+	void     RebuildParentVerticalBoxes();
 	struct FInputLabelBinding
 	{
+		TWeakObjectPtr<UWidget>    Anchor;
 		TWeakObjectPtr<UTextBlock> Label;
 		FName   LocKey;
 		FString FallbackEN;
