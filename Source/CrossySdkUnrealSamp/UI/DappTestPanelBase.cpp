@@ -30,6 +30,7 @@
 
 #include "SDK/CROSSxSdkSubsystem.h"
 #include "Core/Types/CROSSxSdkSettings.h"
+#include "Core/CROSSxEndpoints.h"
 #include "Core/Utils/CROSSxChainUtils.h"
 
 
@@ -112,13 +113,16 @@ namespace
  */
 namespace CrossPayServerSimulator
 {
-	static const FString PaymentsUrl    = TEXT("https://stg-api.crosspay.ai/v1/payments");
 	static const FString MerchantApiKey = TEXT("test-api-key-crosshub-001");
 
 	static void CreateCheckout(
 		const FCROSSxCrossPayCreatePaymentRequest& Request,
 		TFunction<void(bool bSuccess, const FString& CheckoutUrl, const FString& CheckoutId, const FString& ErrorMessage)> OnComplete)
 	{
+		const UCROSSxSdkSettings* Settings = GetDefault<UCROSSxSdkSettings>();
+		const ECROSSxEnvironment Env = Settings ? Settings->Environment : ECROSSxEnvironment::Prod;
+		const FString PaymentsUrl = FCROSSxEndpoints::GetCrossPayApiUrl(Env) + TEXT("/v1/payments");
+
 		const FString RequestJson = SerializeCrossPayRequest(Request);
 
 		TSharedRef<IHttpRequest, ESPMode::ThreadSafe> HttpRequest = FHttpModule::Get().CreateRequest();
