@@ -19,6 +19,9 @@
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonSerializer.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Interfaces/IHttpResponse.h"
+#include "Interfaces/IHttpRequest.h"
+#include "HttpModule.h"
 
 #include "Dapp/DappActor.h"
 #include "UI/DappErc20Codec.h"
@@ -69,6 +72,117 @@ namespace
 		Request.Metadata.Product.Category = TEXT("IN_GAME_ITEM");
 		Request.Metadata.Product.Vendor = TEXT("Seal M on CROSS");
 		return Request;
+	}
+
+	static FString SerializeCrossPayRequest(const FCROSSxCrossPayCreatePaymentRequest& Request)
+	{
+		TSharedRef<FJsonObject> Product = MakeShared<FJsonObject>();
+		Product->SetStringField(TEXT("name"), Request.Metadata.Product.Name);
+		Product->SetStringField(TEXT("detail"), Request.Metadata.Product.Detail);
+		Product->SetStringField(TEXT("image"), Request.Metadata.Product.Image);
+		Product->SetNumberField(TEXT("quantity"), Request.Metadata.Product.Quantity);
+		Product->SetStringField(TEXT("category"), Request.Metadata.Product.Category);
+		Product->SetStringField(TEXT("vendor"), Request.Metadata.Product.Vendor);
+
+		TSharedRef<FJsonObject> Metadata = MakeShared<FJsonObject>();
+		Metadata->SetObjectField(TEXT("product"), Product);
+		Metadata->SetStringField(TEXT("order_id"), Request.Metadata.OrderId);
+
+		TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
+		Root->SetStringField(TEXT("currency"), Request.Currency);
+		Root->SetStringField(TEXT("amount"), Request.Amount);
+		Root->SetStringField(TEXT("payer_uid"), Request.PayerUid);
+		Root->SetObjectField(TEXT("metadata"), Metadata);
+
+		FString Out;
+		const TSharedRef<TJsonWriter<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>> Writer =
+			TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&Out);
+		FJsonSerializer::Serialize(Root, Writer);
+		return Out;
+	}
+}
+
+/**
+ * CrossPayServerSimulator — 클라이언트 측 결제 생성 시뮬레이터.
+ *
+ * 실제 서비스에서는 게임사 서버에서 처리해야 합니다.
+ * 클라이언트는 서버 API를 호출해 CheckoutUrl/CheckoutId를 받아야 합니다.
+ * 이 네임스페이스는 샘플 앱 전용 시뮬레이터로, Merchant API Key가 포함된
+ * 코드를 프로덕션 클라이언트에 배포하지 마세요.
+ */
+namespace CrossPayServerSimulator
+{
+	static const FString PaymentsUrl    = TEXT("https://stg-api.crosspay.ai/v1/payments");
+	static const FString MerchantApiKey = TEXT("test-api-key-crosshub-001");
+
+	static void CreateCheckout(
+		const FCROSSxCrossPayCreatePaymentRequest& Request,
+		TFunction<void(bool bSuccess, const FString& CheckoutUrl, const FString& CheckoutId, const FString& ErrorMessage)> OnComplete)
+	{
+		const FString RequestJson = SerializeCrossPayRequest(Request);
+
+		TSharedRef<IHttpRequest, ESPMode::ThreadSafe> HttpRequest = FHttpModule::Get().CreateRequest();
+		HttpRequest->SetURL(PaymentsUrl);
+		HttpRequest->SetVerb(TEXT("POST"));
+		HttpRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+		HttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
+		HttpRequest->SetHeader(TEXT("Idempotency-Key"), FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens));
+		HttpRequest->SetHeader(TEXT("Authorization"), FString::Printf(TEXT("Bearer %s"), *MerchantApiKey));
+		HttpRequest->SetContentAsString(RequestJson);
+
+		HttpRequest->OnProcessRequestComplete().BindLambda(
+			[OnComplete](FHttpRequestPtr /*Req*/, FHttpResponsePtr Response, bool bSucceeded)
+			{
+				const int32 StatusCode    = Response.IsValid() ? Response->GetResponseCode() : 0;
+				const FString ResponseBody = Response.IsValid() ? Response->GetContentAsString() : FString();
+
+				if (!bSucceeded || !Response.IsValid() || StatusCode < 200 || StatusCode >= 300)
+				{
+					OnComplete(false, FString(), FString(),
+						FString::Printf(TEXT("CROSS Pay failed HTTP %d: %s"), StatusCode, *ResponseBody));
+					return;
+				}
+
+				TSharedPtr<FJsonObject> Root;
+				const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseBody);
+				if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+				{
+					OnComplete(false, FString(), FString(), TEXT("CROSS Pay response is not valid JSON."));
+					return;
+				}
+
+				FString CheckoutUrl, CheckoutId;
+				Root->TryGetStringField(TEXT("checkout_url"), CheckoutUrl);
+				Root->TryGetStringField(TEXT("checkout_id"),  CheckoutId);
+
+				if (CheckoutUrl.IsEmpty())
+				{
+					OnComplete(false, FString(), FString(),
+						TEXT("CROSS Pay checkout_url is missing in the payment response."));
+					return;
+				}
+
+				// checkout_id가 없으면 URL에서 추출합니다.
+				if (CheckoutId.IsEmpty())
+				{
+					FString Left;
+					CheckoutUrl.Split(TEXT("?"), &CheckoutId, &Left, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+					if (CheckoutId.IsEmpty()) { CheckoutId = CheckoutUrl; }
+					int32 SlashIndex = INDEX_NONE;
+					if (CheckoutId.FindLastChar(TEXT('/'), SlashIndex))
+					{
+						CheckoutId = CheckoutId.Mid(SlashIndex + 1);
+					}
+				}
+
+				OnComplete(true, CheckoutUrl, CheckoutId, FString());
+			});
+
+		if (!HttpRequest->ProcessRequest())
+		{
+			OnComplete(false, FString(), FString(),
+				TEXT("CROSS Pay failed: could not start payment request"));
+		}
 	}
 }
 
@@ -1096,9 +1210,34 @@ void UDappTestPanelBase::OnClickUseCrossPay()
 	}
 
 	SetStatus(TEXT("sample.status.openingCrossPay"));
-	FCROSSxCrossPayPaymentDelegate Delegate;
-	Delegate.BindDynamic(this, &UDappTestPanelBase::HandleCrossPayPaymentResult);
-	Sdk->OpenCrossPayAndWaitResultAsync(BuildCrossPayPaymentRequest(), Delegate);
+
+	// Step 1: 서버 시뮬레이터로 checkout 생성.
+	// 실제 서비스에서는 게임사 서버 API를 호출해 CheckoutUrl/CheckoutId를 받아야 합니다.
+	TWeakObjectPtr<UDappTestPanelBase> WeakThis(this);
+	CrossPayServerSimulator::CreateCheckout(BuildCrossPayPaymentRequest(),
+		[WeakThis](bool bSuccess, const FString& CheckoutUrl, const FString& CheckoutId, const FString& ErrorMessage)
+		{
+			UDappTestPanelBase* Self = WeakThis.Get();
+			if (!Self) { return; }
+
+			if (!bSuccess)
+			{
+				Self->NotifyArgs(TEXT("sample.crossPay.failed"), { { TEXT("message"), ErrorMessage } });
+				return;
+			}
+
+			UCROSSxSdkSubsystem* Sdk = Self->ResolveSdk();
+			if (!Sdk)
+			{
+				Self->NotifyError(TEXT("sample.sdk.notReady"), {});
+				return;
+			}
+
+			// Step 2: SDK로 결제 프로세스 진행 (WebView 열기 + 딥링크 대기).
+			FCROSSxCrossPayPaymentDelegate Delegate;
+			Delegate.BindDynamic(Self, &UDappTestPanelBase::HandleCrossPayPaymentResult);
+			Sdk->OpenCrossPayAndWaitResultAsync(CheckoutUrl, CheckoutId, Delegate);
+		});
 }
 
 void UDappTestPanelBase::HandleWebViewResult(const FCROSSxWebViewResult& Result)
