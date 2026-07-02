@@ -1701,12 +1701,12 @@ void UDappTestPanelBase::RebuildParentVerticalBoxes()
 			UWidget* Child = VBox->GetChildAt(i);
 			FChildSnap S;
 			S.Widget = Child;
-			if (UVerticalBoxSlot* Slot = Cast<UVerticalBoxSlot>(Child->Slot))
+			if (UVerticalBoxSlot* VBoxSlot = Cast<UVerticalBoxSlot>(Child->Slot))
 			{
-				S.Padding   = Slot->GetPadding();
-				S.HAlign    = Slot->GetHorizontalAlignment();
-				S.VAlign    = Slot->GetVerticalAlignment();
-				S.Size      = Slot->GetSize();
+				S.Padding   = VBoxSlot->GetPadding();
+				S.HAlign    = VBoxSlot->GetHorizontalAlignment();
+				S.VAlign    = VBoxSlot->GetVerticalAlignment();
+				S.Size      = VBoxSlot->GetSize();
 				S.bHasSlot  = true;
 			}
 			Snaps.Add(MoveTemp(S));

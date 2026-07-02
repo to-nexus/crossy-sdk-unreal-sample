@@ -129,10 +129,10 @@ void UDappNotificationHostWidget::SpawnToast(const FDappNotification& Notificati
 
 	Card->SetContent(Text);
 
-	if (UVerticalBoxSlot* Slot = Box_Toasts->AddChildToVerticalBox(Card))
+	if (UVerticalBoxSlot* VBoxSlot = Box_Toasts->AddChildToVerticalBox(Card))
 	{
-		Slot->SetPadding(FMargin(0.f, ToastSpacing * 0.5f));
-		Slot->SetHorizontalAlignment(HAlign_Fill);
+		VBoxSlot->SetPadding(FMargin(0.f, ToastSpacing * 0.5f));
+		VBoxSlot->SetHorizontalAlignment(HAlign_Fill);
 	}
 
 	const float Duration = Notification.DurationSeconds > 0.f
