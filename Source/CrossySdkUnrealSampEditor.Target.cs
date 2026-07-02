@@ -10,6 +10,7 @@ public class CrossySdkUnrealSampEditorTarget : TargetRules
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
+		bOverrideBuildEnvironment = true;
 		ExtraModuleNames.Add("CrossySdkUnrealSamp");
 	}
 }

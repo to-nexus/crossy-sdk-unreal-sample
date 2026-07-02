@@ -10,6 +10,7 @@ public class CrossySdkUnrealSampTarget : TargetRules
 		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V6;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_7;
+		bOverrideBuildEnvironment = true;
 		ExtraModuleNames.Add("CrossySdkUnrealSamp");
 	}
 }

@@ -125,7 +125,7 @@ namespace
 		// Strip leading zeros (but keep at least one digit).
 		int32 Cut = 0;
 		while (Cut < OutInt.Len() - 1 && OutInt[Cut] == TEXT('0')) { ++Cut; }
-		OutInt.RightChopInline(Cut, false);
+		OutInt.RightChopInline(Cut, EAllowShrinking::No);
 		return true;
 	}
 
@@ -143,7 +143,7 @@ namespace
 		}
 		int32 Cut = 0;
 		while (Cut < Q.Len() - 1 && Q[Cut] == TEXT('0')) { ++Cut; }
-		Q.RightChopInline(Cut, false);
+		Q.RightChopInline(Cut, EAllowShrinking::No);
 		OutRemainder = Rem;
 		return Q;
 	}
@@ -242,7 +242,7 @@ FString DappErc20Codec::DecodeUint256BalanceHex(const FString& HexResult, int32 
 	// Strip leading zeros but keep at least one digit.
 	int32 Cut = 0;
 	while (Cut < Body.Len() - 1 && Body[Cut] == TEXT('0')) { ++Cut; }
-	Body.RightChopInline(Cut, false);
+	Body.RightChopInline(Cut, EAllowShrinking::No);
 	if (Body.IsEmpty() || Body == TEXT("0"))
 	{
 		return TEXT("0");
