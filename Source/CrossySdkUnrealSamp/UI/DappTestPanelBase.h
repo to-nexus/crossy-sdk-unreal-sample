@@ -81,6 +81,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
 	FString DefaultChainId = TEXT("eip155:612044");
 
+	// Default recipient pre-filled into Inp_To / Inp_TokenTo so Sign Tx /
+	// Send Tx / Send Token work without typing an address first. Matches the
+	// original CROSSxSdkTestActor::TestTo convention (harmless CROSS testnet
+	// address, no real funds at risk).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dapp|Defaults")
+	FString DefaultTo = TEXT("0x920A31f0E48739C3FbB790D992b0690f7F5C42ea");
+
 	// Default value pre-filled into Inp_Value when no other text is set.
 	// Interpreted as a decimal native-coin amount (e.g. "1" = 1 ETH / 1
 	// CROSS); the sample converts it into a canonical wei hex quantity via

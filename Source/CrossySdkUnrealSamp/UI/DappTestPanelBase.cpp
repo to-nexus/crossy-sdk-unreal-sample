@@ -252,8 +252,10 @@ void UDappTestPanelBase::NativeConstruct()
 	// hit any button without typing anything. All values are harmless on
 	// CROSS testnet.
 	WriteText(Inp_ChainId,        (DefaultChainId == TEXT("eip155:612044") || DefaultChainId.IsEmpty()) ? ResolveDefaultChainId() : DefaultChainId);
+	WriteText(Inp_To,             DefaultTo);
 	WriteText(Inp_Value,          DefaultTxValueWei);
 	WriteText(Inp_SignMessage,    DefaultSignMessage);
+	WriteText(Inp_TokenTo,        DefaultTo);
 	WriteText(Inp_TokenDecimals,  DefaultTokenDecimals);
 	WriteText(Inp_TokenAmount,    DefaultTokenAmount);
 
@@ -1717,7 +1719,8 @@ void UDappTestPanelBase::RebuildParentVerticalBoxes()
 		for (const FChildSnap& S : Snaps)
 		{
 			// If this child is an anchor, prepend its label first.
-			if (UTextBlock** LabelPtr = AnchorToLabel.Find(S.Widget))
+			UTextBlock** LabelPtr = AnchorToLabel.Find(S.Widget);
+			if (LabelPtr)
 			{
 				if (UVerticalBoxSlot* LSlot = VBox->AddChildToVerticalBox(*LabelPtr))
 					LSlot->SetPadding(FMargin(2.f, 6.f, 2.f, 2.f));
@@ -1727,7 +1730,17 @@ void UDappTestPanelBase::RebuildParentVerticalBoxes()
 			{
 				if (S.bHasSlot)
 				{
-					NewSlot->SetPadding(S.Padding);
+					FMargin SlotPadding = S.Padding;
+					if (LabelPtr)
+					{
+						// Labeled inputs (Inp_*) otherwise keep whatever
+						// padding the WBP author left (often zero), which
+						// crams the value text against the caption above
+						// and the next row below. Force a minimum bottom
+						// gap so the input box reads clearly.
+						SlotPadding.Bottom = FMath::Max(SlotPadding.Bottom, 8.f);
+					}
+					NewSlot->SetPadding(SlotPadding);
 					NewSlot->SetHorizontalAlignment(S.HAlign);
 					NewSlot->SetVerticalAlignment(S.VAlign);
 					NewSlot->SetSize(S.Size);
