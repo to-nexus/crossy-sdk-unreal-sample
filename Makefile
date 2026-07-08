@@ -212,7 +212,7 @@ win64: ## Win64 full build into Saved/StagedBuilds/Windows
 		-project=$(PROJECT) \
 		-platform=Win64 \
 		-configuration=$(CONFIGURATION) \
-		-cook -build -stage -package \
+		-cook -build -stage -package -pak -iostore \
 		-stagingdirectory=$(STAGING) \
 		-nodebuginfo \
 		-utf8output
@@ -222,7 +222,7 @@ win64-archive: ## Win64 archive into Saved/Archive/Windows
 		-project=$(PROJECT) \
 		-platform=Win64 \
 		-configuration=$(CONFIGURATION) \
-		-cook -build -stage -package -archive \
+		-cook -build -stage -package -archive -pak -iostore \
 		-archivedirectory=$(ARCHIVE_DIR)/Windows \
 		-nodebuginfo \
 		-utf8output
