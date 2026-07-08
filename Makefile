@@ -39,19 +39,17 @@ LOCK     := crossx-plugins.lock.json
 # ----------- build / packaging variables ------------------------------------
 #
 # Override any of these on the command line or in `.env`, e.g.:
-#   make ios UE_ROOT="/Applications/Unreal Engine 5.7"
+#   make ios UE_ROOT="/Applications/Unreal Engine 5.8"
 #   make android ANDROID_PACKAGE=com.example.dapp
 # ---------------------------------------------------------------------------
 
-PROJECT_DIR    := $(shell pwd)
+PROJECT_DIR    := $(CURDIR)
 PROJECT_NAME   := CrossySdkUnrealSamp
 PROJECT        := $(PROJECT_DIR)/$(PROJECT_NAME).uproject
 STAGING        := $(PROJECT_DIR)/Saved/StagedBuilds
 
-# Default UE 5.7 install on macOS. On Windows the value would be something
-# like "C:/Program Files/Epic Games/UE_5.7"; in either case point at the
-# folder that contains Engine/Build/BatchFiles/.
-UE_ROOT        ?= /Users/Shared/Epic Games/UE_5.7
+# UE 5.8 install. Point at the folder that contains Engine/Build/BatchFiles/.
+UE_ROOT        ?= $(if $(filter Windows_NT,$(OS)),C:/Program Files/Epic Games/UE_5.8,/Users/Shared/Epic Games/UE_5.8)
 ifeq ($(OS),Windows_NT)
     UAT        := "$(UE_ROOT)/Engine/Build/BatchFiles/RunUAT.bat"
 else
