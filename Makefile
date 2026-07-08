@@ -214,6 +214,7 @@ win64: ## Win64 full build into Saved/StagedBuilds/Windows
 		-configuration=$(CONFIGURATION) \
 		-cook -build -stage -package \
 		-stagingdirectory=$(STAGING) \
+		-nodebuginfo \
 		-utf8output
 
 win64-archive: ## Win64 archive into Saved/Archive/Windows
@@ -223,6 +224,7 @@ win64-archive: ## Win64 archive into Saved/Archive/Windows
 		-configuration=$(CONFIGURATION) \
 		-cook -build -stage -package -archive \
 		-archivedirectory=$(ARCHIVE_DIR)/Windows \
+		-nodebuginfo \
 		-utf8output
 
 mac: ## Mac full build into Saved/StagedBuilds/Mac
