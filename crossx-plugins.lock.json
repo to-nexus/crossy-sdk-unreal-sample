@@ -1,18 +1,18 @@
 {
   "plugins": {
     "CROSSxSdkUnrealPlugin": {
-      "version": "0.0.0-beta.31",
-      "tag": "CROSSxSdkUnrealPlugin@v0.0.0-beta.31",
-      "asset": "CROSSxSdkUnrealPlugin-0.0.0-beta.31.zip",
-      "sha256": "5d57b524d6c6d9847fdb8bfee35fa4d93913ef2a00431989c45a7e13e635b465",
-      "installed_at": "2026-07-09T02:20:02Z"
+      "version": "0.0.0-beta.33",
+      "tag": "CROSSxSdkUnrealPlugin@v0.0.0-beta.33",
+      "asset": "CROSSxSdkUnrealPlugin-0.0.0-beta.33.zip",
+      "sha256": "e57c7520f752190d0e5a2a5bbf53450467e9238b0c0fb9f1a027e85b49df22ae",
+      "installed_at": "2026-07-09T02:59:34Z"
     },
     "CROSSxWebkitSdkUnrealPlugin": {
-      "version": "0.0.0-beta.5",
-      "tag": "CROSSxWebkitSdkUnrealPlugin@v0.0.0-beta.5",
-      "asset": "CROSSxWebkitSdkUnrealPlugin-0.0.0-beta.5.zip",
-      "sha256": "98fcdb05c4287406cfb0d8e3bf37985c5ba007d7fa3da0b7f8f2495ef3fab81e",
-      "installed_at": "2026-07-02T12:32:50Z"
+      "version": "0.0.0-beta.7",
+      "tag": "CROSSxWebkitSdkUnrealPlugin@v0.0.0-beta.7",
+      "asset": "CROSSxWebkitSdkUnrealPlugin-0.0.0-beta.7.zip",
+      "sha256": "3816c07b69ae0e99383be6d2b935c5d846d21b12d532c018def277eb9ead99e3",
+      "installed_at": "2026-07-09T02:59:34Z"
     }
   }
 }
