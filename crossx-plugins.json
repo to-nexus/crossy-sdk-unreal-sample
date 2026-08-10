@@ -7,6 +7,7 @@
     "repo": "crossy-sdk-unreal-sample"
   },
   "plugins": {
-    "CROSSxSdkUnrealPlugin": "0.0.0-beta.43"
+    "CROSSxSdkUnrealPlugin": "0.0.0-beta.43",
+    "CROSSxCaptureSdkUnrealPlugin": "0.0.0-beta.6"
   }
 }

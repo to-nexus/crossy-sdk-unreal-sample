@@ -42,6 +42,7 @@ xcuserdata/
 # The lockfile IS committed so teammates reproduce the same versions.
 /Plugins/CROSSxSdkUnrealPlugin/
 /Plugins/CROSSxWebkitSdkUnrealPlugin/
+/Plugins/CROSSxCaptureSdkUnrealPlugin/
 
 # Local env (PAT etc.)
 .env
